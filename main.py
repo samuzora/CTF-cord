@@ -24,7 +24,7 @@ async def get_prefix(bot, message):
             host="127.0.0.1",
             port=3306,
             username="root",
-            database="CTFlite",
+            database="ctfcord",
             password=MYSQL_PW,
         ) as cnx:
             cursor = cnx.cursor()
@@ -51,6 +51,7 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
+    await bot.user.edit(username='CTF-cord')
     print("Bot is ready.")
 
 
