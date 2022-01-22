@@ -11,11 +11,11 @@ import requests
 
 import config
 
-MYSQL_PW = os.getenv("MYSQL_PW")
-
 
 class CTF(commands.Cog):
-    """Commands to manage CTFs, useful for team organization"""
+    """ CTFs are managed here. With signup, you can register a CTF to take \
+    part in, and never miss another CTF again with automatic Discord event \
+    scheduling! To view details about a CTF, use the details command."""
 
     def __init__(self, bot):
         super().__init__()
@@ -23,7 +23,9 @@ class CTF(commands.Cog):
 
     @commands.command(
         brief="View details about an event, in a nicely formatted embed",
-        description="This command allows you to view relevant information about an event on CTFtime. Use this command with a CTFtime url to the event, or just the event id.",
+        description="This command allows you to view relevant information about"
+                    "an event on CTFtime. Use this command with a CTFtime url "
+                    "to the event, or just the event id.",
         usage="<ctftime event link>"
     )
     async def details(self, ctx, link):
@@ -94,7 +96,10 @@ class CTF(commands.Cog):
 
     @commands.command(
         brief="Sign up for an upcoming CTF",
-        description="Registers an upcoming CTF to the bot. The bot will send a ping to all relevant team members when the CTF starts. Note: this command does not actually sign you up for the event, either on CTFtime or on the actual platform itself.",
+        description="Registers an upcoming CTF to the bot. The bot will send a" \
+                    "ping to all relevant team members when the CTF starts. "   \
+                    "Note: this command does not actually sign you up for the"  \
+                    "event, either on CTFtime or on the actual platform itself.",
         usage="<ctftime event link>"
     )
     async def signup(self, ctx, link):
@@ -115,7 +120,8 @@ class CTF(commands.Cog):
             event_id = event.group()
             # Required, if not CTFtime will 403
             headers = {
-                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0",
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0)" \
+                                "Gecko/20100101 Firefox/61.0",
             }
             # Get JSON via API
             req = requests.get(
@@ -125,7 +131,8 @@ class CTF(commands.Cog):
                 # Invalid event ID
                 embed = discord.Embed(
                     title="Error!",
-                    description="Sorry, this isn't a valid CTFtime event link or id.",
+                    description="Sorry, this isn't a valid CTFtime event " \
+                                "link or id.",
                     colour=discord.Colour.red(),
                 )
             else:
@@ -167,40 +174,42 @@ class CTF(commands.Cog):
                     port=3306,
                     username="root",
                     database="ctfcord",
-                    password=MYSQL_PW,
+                    password=config.MYSQL_PW,
                 ) as cnx:
                     cursor = cnx.cursor()
                     # Check if the user's team has registered this CTF already
+                    # TODO: Automagically detect the user's team if they are in multiple teams 
+                    # (could be via guild)
                     cursor.execute(
-                        "SELECT m.id FROM ctf AS c INNER JOIN \
-                            team_members AS m ON c.team = m.id  \
-                            WHERE member = %s",
+                        "SELECT m.id FROM ctf AS c INNER JOIN " \
+                        "team_members AS m ON c.team = m.id " \
+                        "WHERE member = %s",
                         (event_id,)
                     ) 
-                    if team_id := cursor.fetchone():
+                    if (team_id := cursor.fetchone()) is None:
                         # CTF is already registered
                         # Update the relevant information in case it has changed
+                        embed.colour = discord.Colour.blurple()
                         cursor.execute(
-                            "UPDATE ctf AS c \
-                                INNER JOIN team_members AS m ON c.team = m.id WHERE m.member = %s \
-                                SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s",
+                            "UPDATE ctf AS c " \
+                            "INNER JOIN team_members AS m ON c.team = m.id " \
+                            "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s " \
+                            "WHERE m.member = %s",
                             (
                                 ctx.author.id,
                                 desc,
                                 int(time.mktime(start.timetuple())),
                                 int(time.mktime(finish.timetuple())),
-                                discord_inv,
+                                discord_inv.group(),
                             )
                         )
-                        embed.colour = discord.Colour.blurple()
                     else:
                         # CTF not registered yet
-                        # TODO: Automagically detect the user's team if he is in multiple teams 
-                        # (could be via guild)
+                        embed.colour = discord.Colour.green()
                         cursor.execute(
-                            "INSERT INTO ctf (id, title, description, start, finish, discord, team) \
-                                SELECT %s, %s, %s, %s, %s, %s, id FROM team_members \
-                                WHERE member = %s",
+                            "INSERT INTO ctf (id, title, description, start, finish, discord, team)" \
+                            "SELECT %s, %s, %s, %s, %s, %s, id FROM team_members " \
+                            "WHERE member = %s",
                             (
                                 event_id,
                                 title,
@@ -211,7 +220,6 @@ class CTF(commands.Cog):
                                 ctx.author.id
                             ),
                         ) 
-                        embed.colour = discord.Colour.green()
                     # Commit changes
                     cnx.commit()
         await ctx.send(embed=embed)

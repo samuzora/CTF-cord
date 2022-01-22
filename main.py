@@ -120,7 +120,7 @@ class Help(commands.HelpCommand):
             if cog is not None:
                 value = ""
                 for command in mapping[cog]:
-                    try:  # TODO: change from try to if
+                    try: 
                         await command.can_run(self.context)
                     except:
                         value += f"❌ `{config.prefix}{command.name}`\n"
@@ -140,9 +140,20 @@ class Help(commands.HelpCommand):
             colour=discord.Colour.blurple(),
         )
         for command in cog.walk_commands():
-            embed.add_field(
-                name=f"{config.prefix}{command.name}", value=command.brief, inline=False
-            )
+            try:
+                await command.can_run(self.context)
+            except:
+                embed.add_field(
+                        name=f'❌ `{config.prefix}{command.name}`',
+                        value=command.brief,
+                        inline=False
+                )
+            else:
+                embed.add_field(
+                        name=f'✅ `{config.prefix}{command.name}`', 
+                        value=command.brief, 
+                        inline=False
+                )
         await self.get_destination().send(embed=embed)
 
     # Shown when user specifies a command
@@ -157,10 +168,21 @@ class Help(commands.HelpCommand):
             value=f"```{config.prefix}{command.name} {command.usage}```",
             inline=False,
         )
+        try:
+            await command.can_run(self.context)
+        except:
+            embed.set_footer(
+                    text='❌ You cannot run this command in this context.'
+            )
+        else:
+            embed.set_footer(
+                    text='✅ You can run this command!'
+            )
         await self.get_destination().send(embed=embed)
-
+    
 
 if __name__ == "__main__":
     bot.load_extension("cogs.ctf")
+    bot.load_extension("cogs.teams")
     bot.help_command = Help()
     bot.run(token)
