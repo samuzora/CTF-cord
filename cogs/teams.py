@@ -3,6 +3,7 @@ import datetime
 import os
 
 import discord
+from discord.commands import slash_command
 from discord.ext import commands
 import mysql.connector
 
@@ -47,6 +48,11 @@ class Teams(commands.Cog):
                         'INSERT INTO teams (title, users, guild)' \
                         'VALUES (%s, 1, %s)',
                         (name, ctx.guild.id)
+                )
+                cursor.execute(
+                        'INSERT INTO team_members SELECT id, %s ' \
+                        'FROM teams',
+                        (ctx.author.id,)
                 )
                 cnx.commit()
                 embed = discord.Embed(
@@ -111,6 +117,138 @@ class Teams(commands.Cog):
                         )
         await ctx.send(embed=embed)
     
+    @commands.command(
+            brief="Add others into your team",
+            description="This command allows you to add another member into "\
+                        "your team.",
+            usage="@foobar @asdf @qwerty"
+    )
+    async def add(self, ctx):
+        users = ctx.message.mentions
+        with mysql.connector.connect(
+                host='127.0.0.1',
+                port=3306,
+                username='root',
+                database='ctfcord',
+                password=config.MYSQL_PW
+        ) as cnx:
+            cursor = cnx.cursor()
+            # Get the invoker's team
+            cursor.execute(
+                    'SELECT t.id FROM teams AS t ' \
+                    'INNER JOIN team_members AS m ON t.id = m.id '\
+                    'WHERE m.member = %s AND t.guild = %s',
+                    (ctx.author.id, ctx.guild.id)
+            )
+            team_id = (cursor.fetchone())[0]
+            # Get list of users in team
+            cursor.execute(
+                    'SELECT member FROM team_members ' \
+                    'WHERE id = %s',
+                    (team_id,)
+            )
+            team_members = cursor.fetchall()
+            # Remove any users who are already in team
+            users = [user.id for user in users if (str(user.id),) not in team_members] 
+            if len(users) == 0:
+                embed = discord.Embed(
+                        title="Done",
+                        description="No one was added, as all users " \
+                                    "mentioned are already in the team.",
+                        colour=discord.Colour.blurple()
+                )
+                embed.add_field(
+                    name="Members in your team",
+                    value='\n'.join([f'<@{member[0]}>' for member in team_members])
+                )
+                await ctx.send(embed=embed)
+                return
+            for user in users:
+                cursor.execute(
+                        'INSERT INTO team_members VALUES (%s, %s)',
+                        (team_id, user)
+                )
+            cursor.execute(
+                    'UPDATE teams SET users = users + %s WHERE id = %s',
+                    (len(users), team_id)
+            )
+            embed = discord.Embed(
+                    title="Successfully added",
+                    colour=discord.Colour.green()
+            )
+            embed.add_field(
+                name='Added',
+                value='\n'.join([f'<@{user}>' for user in users])
+            )
+            await ctx.send(embed=embed)
+            cnx.commit()
+
+    @commands.command(
+            brief="Kick others from your team",
+            description="Remove users from your team :< If you want to add " \
+                        "them back, use the add command.",
+            usage="@foobar @asdf @qwerty"
+    )
+    async def kick(self, ctx):
+        users = ctx.message.mentions
+        with mysql.connector.connect(
+                host='127.0.0.1',
+                port=3306,
+                database='ctfcord',
+                username='root',
+                password=config.MYSQL_PW
+        ) as cnx:
+            cursor = cnx.cursor()
+            # Get the invoker's team
+            cursor.execute(
+                    'SELECT t.id FROM teams AS t ' \
+                    'INNER JOIN team_members AS m ON t.id = m.id '\
+                    'WHERE m.member = %s AND t.guild = %s',
+                    (ctx.author.id, ctx.guild.id)
+            )
+            team_id = (cursor.fetchone())[0]
+            # Get users in team
+            cursor.execute(
+                    'SELECT member FROM team_members WHERE id = %s',
+                    (team_id,)
+            )
+            team_members = cursor.fetchall()
+            users = [user.id for user in users if (str(user.id),) in team_members]
+            if len(users) == 0:
+                # All users mentioned are not in team
+                embed = discord.Embed(
+                        title="Done",
+                        description="No one was removed, as everyone mentioned " \
+                                    "is not currently in your team.",
+                        colour=discord.Colour.blurple()
+                )
+                embed.add_field(
+                        name="Members in your team",
+                        value=''.join([f'<@{member[0]}>' for member in team_members])
+                )
+                await ctx.send(embed=embed)
+                return
+            for user in users:
+                cursor.execute(
+                        'DELETE FROM team_members ' \
+                        'WHERE member = %s AND id = %s',
+                        (user, team_id)
+                )
+            cursor.execute(
+                    'UPDATE teams SET users = users - %s ' \
+                    'WHERE id = %s',
+                    (len(users), team_id)
+            )
+            embed = discord.Embed(
+                    title="Successfully removed",
+                    colour=discord.Colour.green()
+            )
+            embed.add_field(
+                    name="Removed",
+                    value=''.join([f'<@{user}>' for user in users])
+            )
+            await ctx.send(embed=embed)
+            cnx.commit()
 
 def setup(bot):
     bot.add_cog(Teams(bot))

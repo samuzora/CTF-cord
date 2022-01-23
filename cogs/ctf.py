@@ -77,7 +77,7 @@ class CTF(commands.Cog):
                 embed.set_thumbnail(url=logo_url)
                 embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
                 embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
-                embed.add_field(name="CTFtime", value=f"<https://ctftime.org/events/{event_id}>")
+                embed.add_field(name="CTFtime", value=f"<https://ctftime.org/event/{event_id}>")
                 embed.set_footer(
                         text=f"{participants} participants"
                 )
@@ -154,7 +154,7 @@ class CTF(commands.Cog):
                 embed.set_thumbnail(url=logo_url)
                 embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
                 embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
-                embed.add_field(name="CTFtime", value=f"https://ctftime.org/events/{event_id}")
+                embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
                 embed.set_footer(
                     text=f"{participants} participants"
                 )
