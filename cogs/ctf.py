@@ -178,13 +178,12 @@ class CTF(commands.Cog):
                 ) as cnx:
                     cursor = cnx.cursor()
                     # Check if the user's team has registered this CTF already
-                    # TODO: Automagically detect the user's team if they are in multiple teams 
-                    # (could be via guild)
                     cursor.execute(
-                        "SELECT m.id FROM ctf AS c INNER JOIN " \
-                        "team_members AS m ON c.team = m.id " \
-                        "WHERE member = %s",
-                        (event_id,)
+                        "SELECT m.id FROM ctf AS c " \
+                        "INNER JOIN team_members AS m ON c.team = m.id " \
+                        "INNER JOIN teams AS t ON m.id = t.id " \
+                        "WHERE t.guild = %s AND m.member = %s ",
+                        (ctx.guild.id, ctx.author.id)
                     ) 
                     if (team_id := cursor.fetchone()) is None:
                         # CTF is already registered
@@ -193,6 +192,7 @@ class CTF(commands.Cog):
                         cursor.execute(
                             "UPDATE ctf AS c " \
                             "INNER JOIN team_members AS m ON c.team = m.id " \
+                            "INNER JOIN teams AS t ON m.id = t.id " \
                             "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s " \
                             "WHERE m.member = %s",
                             (
@@ -202,6 +202,13 @@ class CTF(commands.Cog):
                                 int(time.mktime(finish.timetuple())),
                                 discord_inv.group(),
                             )
+                        )
+                        await ctx.guild.create_scheduled_event(
+                                name=title,
+                                description=desc + f'\nCTFtime:\nhttps://ctftime.org/event/{event_id}',
+                                start_time=start,
+                                end_time=finish,
+                                location=url
                         )
                     else:
                         # CTF not registered yet
@@ -223,7 +230,6 @@ class CTF(commands.Cog):
                     # Commit changes
                     cnx.commit()
         await ctx.send(embed=embed)
-
 
 def setup(bot):
     bot.add_cog(CTF(bot))
