@@ -17,4 +17,4 @@ A Discord bot for all your CTF management needs.
 
 ## Might be added
 - Search for event by name and year
-- After the CTF is over, move the CTF to "Archived" category
+- After the CTF is over, move the CTF text channel to "Archived" category

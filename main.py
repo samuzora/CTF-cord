@@ -16,6 +16,8 @@ token = os.environ.get("CTFLITE_BOT_TOKEN")
 MYSQL_PW = os.getenv("MYSQL_PW")
 default_prefix = ";"
 logging.basicConfig(level=logging.INFO)
+intents = discord.Intents.default()
+intents.members = True
 
 # Get prefix for current guild
 async def get_prefix(bot, message):
@@ -45,7 +47,8 @@ async def get_prefix(bot, message):
 bot = commands.Bot(
     command_prefix=get_prefix,
     case_insensitive=True,
-    description="8059blank.tk on Discord.",
+    description="CTF-cord - the one-stop bot for CTF management!",
+    intents=intents
 )
 
 

@@ -180,31 +180,33 @@ class CTF(commands.Cog):
                     # Check if the user's team has registered this CTF already
                     cursor.execute(
                         "SELECT t.id FROM ctf AS c " \
-                        "INNER JOIN team_members AS m ON c.team = m.id " \
-                        "INNER JOIN teams AS t ON m.id = t.id " \
-                        "WHERE c.id = %s AND t.guild = %s AND m.member = %s ",
+                        "INNER JOIN team_members AS m ON c.team = m.team " \
+                        "INNER JOIN teams AS t ON m.team = t.id " \
+                        "WHERE c.id = %s AND t.guild = %s AND m.member = %s",
                         (event_id, ctx.guild.id, ctx.author.id)
                     ) 
                     if (team_id := cursor.fetchone()) is not None:
                         # CTF is already registered
-                        # Update the relevant information in case it has changed
+                        # Change embed colour to blurple as a hint to the user. Does not create a new field in the embed as this is non-essential
                         embed.colour = discord.Colour.blurple()
+                        # Update the relevant information in case it has changed
                         cursor.execute(
                             "UPDATE ctf AS c " \
-                            "INNER JOIN team_members AS m ON c.team = m.id " \
-                            "INNER JOIN teams AS t ON m.id = t.id " \
+                            "INNER JOIN team_members AS m ON c.team = m.team " \
+                            "INNER JOIN teams AS t ON m.team = t.id " \
                             "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s " \
                             "WHERE m.member = %s",
                             (
-                                ctx.author.id,
                                 desc,
                                 int(time.mktime(start.timetuple())),
                                 int(time.mktime(finish.timetuple())),
                                 discord_inv.group(),
+                                ctx.author.id
                             )
                         )
                     else:
                         # CTF not registered yet
+                        # Green to inform the user that the CTF has been added successfully
                         embed.colour = discord.Colour.green()
                         # Create scheduled event
                         scheduled_event = await ctx.guild.create_scheduled_event(
@@ -214,12 +216,13 @@ class CTF(commands.Cog):
                                 end_time=finish,
                                 location=url
                         )
+                        # Add CTF into db
                         cursor.execute(
-                            "INSERT INTO ctf (id, title, description, start, " \
-                                "finish, discord, team, scheduled_event) " \
-                            "SELECT %s, %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
-                            "INNER JOIN team_members AS m ON m.id = t.id " \
-                            "WHERE m.member = %s ",
+                                "INSERT INTO ctf (id, title, description, start, " \
+                                    "finish, discord, team, scheduled_event) " \
+                                "SELECT %s, %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
+                                "INNER JOIN team_members AS m ON m.team = t.id " \
+                                "WHERE m.member = %s ",
                             (
                                 event_id,
                                 title,
@@ -231,6 +234,65 @@ class CTF(commands.Cog):
                                 ctx.author.id
                             )
                         ) 
+                        # Create new text channel for the CTF
+                        # Get list of members to update perms for channel
+                        # Default perms to view_channel = False
+                        perms = {
+                                ctx.guild.default_role: \
+                                        discord.PermissionOverwrite(view_channel=False),
+                                ctx.guild.me: \
+                                        discord.PermissionOverwrite(view_channel=True)
+
+                        }
+                        # Get user's team
+                        cursor.execute(
+                                'SELECT t.id FROM team_members AS m '\
+                                'INNER JOIN teams AS t ON t.id = m.team '\
+                                'WHERE t.guild = %s AND m.member = %s',
+                                (ctx.guild.id, ctx.author.id)
+                        )
+                        team_id = cursor.fetchone()[0]
+                        # Get all members in team
+                        cursor.execute(
+                                'SELECT member FROM team_members '\
+                                'WHERE team = %s',
+                                (team_id,)
+                        )
+                        members = cursor.fetchall()
+                        for member in members:
+                            member_id = member[0]
+                            perms[ctx.guild.get_member(member_id)] = \
+                                    discord.PermissionOverwrite(view_channel=True)
+                        # Check if CTF category exists
+                        cursor.execute(
+                                'SELECT t.ctf_category FROM teams AS t ' \
+                                'INNER JOIN team_members AS m ON t.id = m.team ' \
+                                'WHERE m.member = %s',
+                                (ctx.author.id,)
+                        )
+                        if (ctf_category := cursor.fetchone()) is None \
+                                or ctx.guild.get_channel(ctf_category[0]) not in ctx.guild.categories:
+                            # Category does not exist, create it first
+                            ctf_category = await ctx.guild.create_category_channel('CTFs')          
+                            cursor.execute(
+                                    'UPDATE teams SET ctf_category = %s '\
+                                    'WHERE id = %s',
+                                    (ctf_category.id, team_id)
+                            )
+                        else:
+                            ctf_category = ctx.guild.get_channel(ctf_category[0])
+                        # Create channel
+                        ctf_channel = await ctx.guild.create_text_channel(
+                                title,
+                                overwrites=perms,
+                                category=ctf_category
+                        ) 
+                        # Save channel in db
+                        cursor.execute(
+                                'UPDATE ctf SET channel = %s '\
+                                'WHERE id = %s',
+                                (ctf_channel.id, event_id)
+                        )
                     # Commit changes
                     cnx.commit()
         await ctx.send(embed=embed)
@@ -288,7 +350,7 @@ class CTF(commands.Cog):
                     cursor.execute(
                             'SELECT t.id FROM ctf AS c ' \
                             'INNER JOIN teams AS t ON c.team = t.id ' \
-                            'INNER JOIN team_members AS m ON t.id = m.id ' \
+                            'INNER JOIN team_members AS m ON t.id = m.team ' \
                             'WHERE c.id = %s AND t.guild = %s AND m.member = %s',
                             (event_id, ctx.guild.id, ctx.author.id)
                     )
@@ -300,7 +362,7 @@ class CTF(commands.Cog):
                         title = event_info["title"]
                         desc = event_info["description"]
                         if len(desc) > 4096:
-                            desc = desc[:4092] + '...'
+                            desc = desc[:4093] + '...'
                         participants = event_info["participants"]
                         start = datetime.datetime.fromisoformat(event_info["start"])
                         finish = datetime.datetime.fromisoformat(event_info["finish"])
@@ -333,7 +395,7 @@ class CTF(commands.Cog):
                                 'WHERE c.id = %s',
                                 (event_id,)
                         )
-                        scheduled_event = ctx.guild.get_scheduled_event(int(cursor.fetchone()[0]))
+                        scheduled_event = ctx.guild.get_scheduled_event(cursor.fetchone()[0])
                         try:
                             await scheduled_event.delete()
                         except:

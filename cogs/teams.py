@@ -38,20 +38,20 @@ class Teams(commands.Cog):
             # Right now, one user is limited to one team per guild 
             cursor.execute(
                     'SELECT COUNT(1) FROM team_members AS m ' \
-                    'INNER JOIN teams AS t ON m.id = t.id ' \
+                    'INNER JOIN teams AS t ON m.team = t.id ' \
                     'WHERE m.member = %s AND t.guild = %s', 
                     (ctx.author.id, ctx.guild.id)
             )
             if cursor.fetchone()[0] == 0:
                 # User doesn't have a team in this guild
                 cursor.execute(
-                        'INSERT INTO teams (title, users, guild)' \
+                        'INSERT INTO teams (title, members, guild)' \
                         'VALUES (%s, 1, %s)',
                         (name, ctx.guild.id)
                 )
                 cursor.execute(
-                        'INSERT INTO team_members SELECT id, %s ' \
-                        'FROM teams',
+                        'INSERT INTO team_members '
+                        'SELECT id, %s FROM teams',
                         (ctx.author.id,)
                 )
                 cnx.commit()
@@ -91,12 +91,15 @@ class Teams(commands.Cog):
             cursor = cnx.cursor()
             cursor.execute(
                     'SELECT m.id FROM team_members AS m ' \
-                    'INNER JOIN teams AS t ON m.id = t.id ' \
+                    'INNER JOIN teams AS t ON m.team = t.id ' \
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
             )
             if (team_id := cursor.fetchone()) is not None:
                 # TODO: implement voting system to delete team
+                # TODO: possibly remove this feature and instead only 
+                # allow users to leave a team, which is deleted when
+                # there are no users left
                 cursor.execute('DELETE FROM team_members WHERE id = %s',
                         (team_id[0],)
                 )
@@ -136,7 +139,7 @@ class Teams(commands.Cog):
             # Get the invoker's team
             cursor.execute(
                     'SELECT t.id FROM teams AS t ' \
-                    'INNER JOIN team_members AS m ON t.id = m.id '\
+                    'INNER JOIN team_members AS m ON t.id = m.team '\
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
             )
@@ -144,12 +147,12 @@ class Teams(commands.Cog):
             # Get list of users in team
             cursor.execute(
                     'SELECT member FROM team_members ' \
-                    'WHERE id = %s',
+                    'WHERE team = %s',
                     (team_id,)
             )
             team_members = cursor.fetchall()
             # Remove any users who are already in team
-            users = [user.id for user in users if (str(user.id),) not in team_members] 
+            users = [user.id for user in users if (user.id,) not in team_members] 
             if len(users) == 0:
                 embed = discord.Embed(
                         title="Done",
@@ -169,7 +172,7 @@ class Teams(commands.Cog):
                         (team_id, user)
                 )
             cursor.execute(
-                    'UPDATE teams SET users = users + %s WHERE id = %s',
+                    'UPDATE teams SET members = members + %s WHERE id = %s',
                     (len(users), team_id)
             )
             embed = discord.Embed(
@@ -202,18 +205,18 @@ class Teams(commands.Cog):
             # Get the invoker's team
             cursor.execute(
                     'SELECT t.id FROM teams AS t ' \
-                    'INNER JOIN team_members AS m ON t.id = m.id '\
+                    'INNER JOIN team_members AS m ON t.id = m.team '\
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
             )
             team_id = (cursor.fetchone())[0]
             # Get users in team
             cursor.execute(
-                    'SELECT member FROM team_members WHERE id = %s',
+                    'SELECT member FROM team_members WHERE team = %s',
                     (team_id,)
             )
             team_members = cursor.fetchall()
-            users = [user.id for user in users if (str(user.id),) in team_members]
+            users = [user.id for user in users if (user.id,) in team_members]
             if len(users) == 0:
                 # All users mentioned are not in team
                 embed = discord.Embed(
@@ -231,11 +234,11 @@ class Teams(commands.Cog):
             for user in users:
                 cursor.execute(
                         'DELETE FROM team_members ' \
-                        'WHERE member = %s AND id = %s',
+                        'WHERE member = %s AND team = %s',
                         (user, team_id)
                 )
             cursor.execute(
-                    'UPDATE teams SET users = users - %s ' \
+                    'UPDATE teams SET members = members - %s ' \
                     'WHERE id = %s',
                     (len(users), team_id)
             )
