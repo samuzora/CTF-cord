@@ -4,6 +4,7 @@ import os
 import time
 
 import discord
+from discord.commands import slash_command
 from discord.ext import commands
 import mysql.connector
 import regex
@@ -21,19 +22,16 @@ class CTF(commands.Cog):
         super().__init__()
         self.bot = bot
 
-    @commands.command(
-        brief="View details about an event, in a nicely formatted embed",
-        description="This command allows you to view relevant information about"
-                    "an event on CTFtime. Use this command with a CTFtime url "
-                    "to the event, or just the event id.",
-        usage="<ctftime event link>"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="View details about an event in a nicely formatted embed."
     )
-    async def details(self, ctx, link):
+    async def details(self, ctx, ctftime_link: str):
         # Check whether the link is valid
         p = regex.match(
-            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", link
+            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
         )
-        if p is None and regex.match("[0-9]+", link) is None:
+        if p is None and regex.match("[0-9]+", ctftime_link) is None:
             # The link is neither valid nor a possible CTFtime event ID
             embed = discord.Embed(
                 title="Error!",
@@ -42,7 +40,7 @@ class CTF(commands.Cog):
             )
         else:
             # Search for the ID in link
-            event = regex.search("[0-9]+", link)
+            event = regex.search("[0-9]+", ctftime_link)
             event_id = event.group()
             # Required, if not CTFtime will 403
             headers = {
@@ -92,15 +90,11 @@ class CTF(commands.Cog):
                         name="Discord Server",
                         value=f"[Click here to join]({discord_inv.group()})",
                     )
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
-    @commands.command(
-        brief="Sign up for an upcoming CTF",
-        description="Registers an upcoming CTF to the bot. The bot will send a" \
-                    "ping to all relevant team members when the CTF starts. "   \
-                    "Note: this command does not actually sign you up for the"  \
-                    "event, either on CTFtime or on the actual platform itself.",
-        usage="<ctftime event link>"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Sign up for an upcoming CTF, and register it to the bot."
     )
     async def signup(self, ctx, link):
         # Check whether the link is valid
@@ -295,21 +289,18 @@ class CTF(commands.Cog):
                         )
                     # Commit changes
                     cnx.commit()
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
-    @commands.command(
-            brief="Unregister a CTF",
-            description="This command allows you to unregister a CTF in "\
-                        "Discord. Note: this command does not unregister you "\
-                        "from CTFtime and the actual CTF platform.",
-            usage="<ctftime event link>"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Un-signup for a CTF, unregistering it from the bot."
     )
-    async def unsignup(self, ctx, link):
+    async def unsignup(self, ctx, ctftime_link: str):
         # Check whether the link is valid
         p = regex.match(
-            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", link
+            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
         )
-        if p is None and regex.match("[0-9]+", link) is None:
+        if p is None and regex.match("[0-9]+", ctftime_link) is None:
             # The link is neither valid nor a possible CTFtime event ID
             embed = discord.Embed(
                 title="Error!",
@@ -318,7 +309,7 @@ class CTF(commands.Cog):
             )
         else:
             # Try to grab the event ID from the link
-            event = regex.search("[0-9]+", link)
+            event = regex.search("[0-9]+", ctftime_link)
             event_id = event.group()
             # Required, if not CTFtime will 403
             headers = {
@@ -405,11 +396,18 @@ class CTF(commands.Cog):
                             )
                             embed.colour = discord.Colour.blurple()
                         else:
-                            embed.add_field(
-                                name="Scheduled Discord event",
-                                value="The event has been deleted."
-                            )
                             embed.colour = discord.Colour.green()
+                        # Delete CTF channel
+                        cursor.execute(
+                                'SELECT channel FROM ctf '\
+                                'WHERE team = %s AND id = %s',
+                                (team_id[0], event_id)
+                        )
+                        channel = ctx.guild.get_channel(cursor.fetchone()[0])
+                        try:
+                            await channel.delete()
+                        except NotFound:
+                            pass
                         # Delete CTF from db
                         cursor.execute(
                                 'DELETE FROM ctf WHERE team = %s AND id = %s',
@@ -424,7 +422,7 @@ class CTF(commands.Cog):
                                 colour=discord.Colour.red()
                                 )
 
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
 
 def setup(bot):
     bot.add_cog(CTF(bot))

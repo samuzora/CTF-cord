@@ -19,13 +19,11 @@ class Teams(commands.Cog):
         super().__init__()
         self.bot = bot
 
-    @commands.command(
-            brief="Create a team",
-            description="This command allows you to create a team. To " \
-                        "add others into your team, use the add command.",
-            usage="<team-name>"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Creates a team so you can use this bot with others!"
     )
-    async def create(self, ctx, name):
+    async def create(self, ctx, name: str):
         with mysql.connector.connect(
                 host='127.0.0.1',
                 port=3306,
@@ -71,14 +69,11 @@ class Teams(commands.Cog):
                                 "the leave command.",
                         colour=discord.Colour.red()
                 )
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
             
-    @commands.command(
-            brief="Delete your team",
-            description="This commmand allows you to delete the team you are " \
-                        "in. This action is irreversible; please discuss " \
-                        "with your teammates first.",
-            usage=""
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Deletes a team. This is irrversible."
     )
     async def delete(self, ctx):
         with mysql.connector.connect(
@@ -96,7 +91,6 @@ class Teams(commands.Cog):
                     (ctx.author.id, ctx.guild.id)
             )
             if (team_id := cursor.fetchone()) is not None:
-                # TODO: implement voting system to delete team
                 # TODO: possibly remove this feature and instead only 
                 # allow users to leave a team, which is deleted when
                 # there are no users left
@@ -118,16 +112,14 @@ class Teams(commands.Cog):
                         description="You are not currently in a team.",
                         colour=discord.Colour.red()
                         )
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
     
-    @commands.command(
-            brief="Add others into your team",
-            description="This command allows you to add another member into "\
-                        "your team.",
-            usage="@foobar @asdf @qwerty"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Adds another member into your team!"
     )
-    async def add(self, ctx):
-        users = ctx.message.mentions
+    async def add(self, ctx, member: discord.Member):
+        member = member.id
         with mysql.connector.connect(
                 host='127.0.0.1',
                 port=3306,
@@ -151,49 +143,51 @@ class Teams(commands.Cog):
                     (team_id,)
             )
             team_members = cursor.fetchall()
-            # Remove any users who are already in team
-            users = [user.id for user in users if (user.id,) not in team_members] 
-            if len(users) == 0:
+            if (member,) in team_members:
+                # Member mentioned already in team
                 embed = discord.Embed(
-                        title="Done",
-                        description="No one was added, as all users " \
-                                    "mentioned are already in the team.",
-                        colour=discord.Colour.blurple()
+                        title="Failed",
+                        description="This user is already in your team.",
+                        colour=discord.Colour.red()
                 )
-                embed.add_field(
-                    name="Members in your team",
-                    value='\n'.join([f'<@{member[0]}>' for member in team_members])
-                )
-                await ctx.send(embed=embed)
-                return
-            for user in users:
+            else:
+                # Member not in team
+                # Update team_member table
                 cursor.execute(
                         'INSERT INTO team_members VALUES (%s, %s)',
-                        (team_id, user)
+                        (team_id, member)
                 )
+                # Update size of team
+                cursor.execute(
+                        'UPDATE teams SET members = members + 1 WHERE id = %s',
+                        (team_id,)
+                )
+                embed = discord.Embed(
+                        title="Successfully added",
+                        description=f"Successfully added <@{member}> into team. Good luck!",
+                        colour=discord.Colour.green()
+                        )
+            # Refresh list in case of changes
             cursor.execute(
-                    'UPDATE teams SET members = members + %s WHERE id = %s',
-                    (len(users), team_id)
+                    'SELECT member FROM team_members ' \
+                    'WHERE team = %s',
+                    (team_id,)
             )
-            embed = discord.Embed(
-                    title="Successfully added",
-                    colour=discord.Colour.green()
-            )
+            team_members = cursor.fetchall()
+            # Add list of team_members
             embed.add_field(
-                name='Added',
-                value='\n'.join([f'<@{user}>' for user in users])
+                    name="Members in your team",
+                    value='\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
             )
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
             cnx.commit()
 
-    @commands.command(
-            brief="Kick others from your team",
-            description="Remove users from your team :< If you want to add " \
-                        "them back, use the add command.",
-            usage="@foobar @asdf @qwerty"
+    @slash_command(
+            guild_ids=config.beta_guilds,
+            description="Remove others from your team :<"
     )
-    async def kick(self, ctx):
-        users = ctx.message.mentions
+    async def remove(self, ctx, member: discord.Member):
+        member = member.id
         with mysql.connector.connect(
                 host='127.0.0.1',
                 port=3306,
@@ -216,41 +210,41 @@ class Teams(commands.Cog):
                     (team_id,)
             )
             team_members = cursor.fetchall()
-            users = [user.id for user in users if (user.id,) in team_members]
-            if len(users) == 0:
-                # All users mentioned are not in team
+            if (member,) not in team_members:
                 embed = discord.Embed(
-                        title="Done",
-                        description="No one was removed, as everyone mentioned " \
-                                    "is not currently in your team.",
-                        colour=discord.Colour.blurple()
+                        title="Failed",
+                        description="The user is not in your team.",
+                        colour=discord.Colour.red()
                 )
-                embed.add_field(
-                        name="Members in your team",
-                        value=''.join([f'<@{member[0]}>' for member in team_members])
-                )
-                await ctx.send(embed=embed)
-                return
-            for user in users:
+            else:
+                # Remove user from team_members table
                 cursor.execute(
                         'DELETE FROM team_members ' \
                         'WHERE member = %s AND team = %s',
-                        (user, team_id)
+                        (member, team_id)
                 )
+                # Reduce team member count by ont
+                cursor.execute(
+                        'UPDATE teams SET members = members - 1 ' \
+                        'WHERE id = %s',
+                        (team_id,)
+                )
+                embed = discord.Embed(
+                        title="Successfully removed",
+                        description=f"<@{member}> has been removed from your team.",
+                        colour=discord.Colour.green()
+                )
+            # Refresh list of members
             cursor.execute(
-                    'UPDATE teams SET members = members - %s ' \
-                    'WHERE id = %s',
-                    (len(users), team_id)
+                    'SELECT member FROM team_members WHERE team = %s',
+                    (team_id,)
             )
-            embed = discord.Embed(
-                    title="Successfully removed",
-                    colour=discord.Colour.green()
-            )
+            team_members = cursor.fetchall()
             embed.add_field(
-                    name="Removed",
-                    value=''.join([f'<@{user}>' for user in users])
+                    name="Members in your team",
+                    value='\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
             )
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
             cnx.commit()
 
 def setup(bot):
