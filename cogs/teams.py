@@ -3,7 +3,7 @@ import datetime
 import os
 
 import discord
-from discord.commands import slash_command
+from discord.commands import slash_command, SlashCommandGroup
 from discord.ext import commands
 import mysql.connector
 
@@ -19,8 +19,11 @@ class Teams(commands.Cog):
         super().__init__()
         self.bot = bot
 
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    team_group = SlashCommandGroup(
+            'team', 'Group of commands for team management', 
+            guild_ids=config.beta_guilds
+    )
+    @team_group.command(
             description="Creates a team so you can use this bot with others!"
     )
     async def create(self, ctx, name: str):
@@ -71,8 +74,7 @@ class Teams(commands.Cog):
                 )
         await ctx.respond(embed=embed)
             
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    @team_group.command(
             description="Deletes a team. This is irrversible."
     )
     async def delete(self, ctx):
@@ -114,8 +116,7 @@ class Teams(commands.Cog):
                         )
         await ctx.respond(embed=embed)
     
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    @team_group.command(
             description="Adds another member into your team!"
     )
     async def add(self, ctx, member: discord.Member):
@@ -182,8 +183,7 @@ class Teams(commands.Cog):
             await ctx.respond(embed=embed)
             cnx.commit()
 
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    @team_group.command(
             description="Remove others from your team :<"
     )
     async def remove(self, ctx, member: discord.Member):
@@ -231,7 +231,7 @@ class Teams(commands.Cog):
                 )
                 embed = discord.Embed(
                         title="Successfully removed",
-                        description=f"<@{member}> has been removed from your team.",
+                        description=f"<@{member}> has been removed from your team. Good bye!",
                         colour=discord.Colour.green()
                 )
             # Refresh list of members

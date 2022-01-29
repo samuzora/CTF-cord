@@ -4,13 +4,18 @@ import os
 import time
 
 import discord
-from discord.commands import slash_command
+from discord.commands import slash_command, SlashCommandGroup
 from discord.ext import commands
 import mysql.connector
 import regex
 import requests
 
 import config
+
+# TODO: Update /signup to add 0 value to column archived in ctf
+# TODO: Finish up /solving and /solved
+# TODO: At the end of a CTF, calculate the percentage of points each participant solved and archive the CTF 
+# TODO: Add /archive command to allow users to archive a CTF manually
 
 
 class CTF(commands.Cog):
@@ -22,8 +27,9 @@ class CTF(commands.Cog):
         super().__init__()
         self.bot = bot
 
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    ctf = SlashCommandGroup('ctf', 'Group of commands for CTF management', guild_ids=config.beta_guilds)
+
+    @ctf.command(
             description="View details about an event in a nicely formatted embed."
     )
     async def details(self, ctx, ctftime_link: str):
@@ -92,11 +98,11 @@ class CTF(commands.Cog):
                     )
         await ctx.respond(embed=embed)
 
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    @ctf.command(
             description="Sign up for an upcoming CTF, and register it to the bot."
     )
     async def signup(self, ctx, link):
+        await ctx.defer()
         # Check whether the link is valid
         p = regex.match(
             "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", link
@@ -104,7 +110,7 @@ class CTF(commands.Cog):
         if p is None and regex.match("[0-9]+", link) is None:
             # The link is neither valid nor a possible CTFtime event ID
             embed = discord.Embed(
-                title="Error!",
+                title="Failed",
                 description="Sorry, this isn't a valid CTFtime event link or id.",
                 colour=discord.Colour.red(),
             )
@@ -124,7 +130,7 @@ class CTF(commands.Cog):
             if req.status_code == 404:
                 # Invalid event ID
                 embed = discord.Embed(
-                    title="Error!",
+                    title="Failed",
                     description="Sorry, this isn't a valid CTFtime event " \
                                 "link or id.",
                     colour=discord.Colour.red(),
@@ -149,9 +155,6 @@ class CTF(commands.Cog):
                 embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
                 embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
                 embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
-                embed.set_footer(
-                    text=f"{participants} participants"
-                )
                 embed.url = url
                 if discord_inv := regex.search(
                     "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
@@ -181,27 +184,34 @@ class CTF(commands.Cog):
                     ) 
                     if (team_id := cursor.fetchone()) is not None:
                         # CTF is already registered
-                        # Change embed colour to blurple as a hint to the user. Does not create a new field in the embed as this is non-essential
+                        # Change embed colour to blurple as a hint to the user 
                         embed.colour = discord.Colour.blurple()
+                        embed.set_footer(
+                                text="You have already signed up for this event!"
+                        )
                         # Update the relevant information in case it has changed
                         cursor.execute(
                             "UPDATE ctf AS c " \
                             "INNER JOIN team_members AS m ON c.team = m.team " \
                             "INNER JOIN teams AS t ON m.team = t.id " \
                             "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s " \
-                            "WHERE m.member = %s",
+                            "WHERE m.member = %s AND t.guild = %s",
                             (
                                 desc,
                                 int(time.mktime(start.timetuple())),
                                 int(time.mktime(finish.timetuple())),
                                 discord_inv.group(),
-                                ctx.author.id
+                                ctx.author.id,
+                                ctx.guild.id
                             )
                         )
                     else:
                         # CTF not registered yet
                         # Green to inform the user that the CTF has been added successfully
                         embed.colour = discord.Colour.green()
+                        embed.set_footer(
+                                text="Successfully signed up for this event!"
+                        )
                         # Create scheduled event
                         scheduled_event = await ctx.guild.create_scheduled_event(
                                 name=title,
@@ -216,7 +226,7 @@ class CTF(commands.Cog):
                                     "finish, discord, team, scheduled_event) " \
                                 "SELECT %s, %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
                                 "INNER JOIN team_members AS m ON m.team = t.id " \
-                                "WHERE m.member = %s ",
+                                "WHERE m.member = %s AND t.guild = %s ",
                             (
                                 event_id,
                                 title,
@@ -225,7 +235,8 @@ class CTF(commands.Cog):
                                 int(time.mktime(finish.timetuple())),
                                 discord_inv.group(),
                                 scheduled_event.id,
-                                ctx.author.id
+                                ctx.author.id,
+                                ctx.guild.id
                             )
                         ) 
                         # Create new text channel for the CTF
@@ -278,6 +289,7 @@ class CTF(commands.Cog):
                         # Create channel
                         ctf_channel = await ctx.guild.create_text_channel(
                                 title,
+                                topic=f"https://ctftime.org/event/{event_id}",
                                 overwrites=perms,
                                 category=ctf_category
                         ) 
@@ -290,12 +302,13 @@ class CTF(commands.Cog):
                     # Commit changes
                     cnx.commit()
         await ctx.respond(embed=embed)
+        await ctf_channel.send(embed=embed)
 
-    @slash_command(
-            guild_ids=config.beta_guilds,
+    @ctf.command(
             description="Un-signup for a CTF, unregistering it from the bot."
     )
     async def unsignup(self, ctx, ctftime_link: str):
+        await ctx.defer()
         # Check whether the link is valid
         p = regex.match(
             "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
@@ -303,7 +316,7 @@ class CTF(commands.Cog):
         if p is None and regex.match("[0-9]+", ctftime_link) is None:
             # The link is neither valid nor a possible CTFtime event ID
             embed = discord.Embed(
-                title="Error!",
+                title="Failed",
                 description="Sorry, this isn't a valid CTFtime event link or id.",
                 colour=discord.Colour.red(),
             )
@@ -323,7 +336,7 @@ class CTF(commands.Cog):
             if req.status_code == 404:
                 # Invalid event ID
                 embed = discord.Embed(
-                    title="Error!",
+                    title="Failed",
                     description="Sorry, this isn't a valid CTFtime event " \
                                 "link or id.",
                     colour=discord.Colour.red(),
@@ -366,9 +379,6 @@ class CTF(commands.Cog):
                         embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
                         embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
                         embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
-                        embed.set_footer(
-                            text=f"{participants} participants"
-                        )
                         embed.url = url
                         if discord_inv := regex.search(
                             "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
@@ -406,23 +416,73 @@ class CTF(commands.Cog):
                         channel = ctx.guild.get_channel(cursor.fetchone()[0])
                         try:
                             await channel.delete()
-                        except NotFound:
+                        except:
                             pass
                         # Delete CTF from db
                         cursor.execute(
                                 'DELETE FROM ctf WHERE team = %s AND id = %s',
                                 (team_id[0], event_id)
                         )
+                        embed.set_footer(
+                                text="The event has been successfully unregistered."
+                        )
                         cnx.commit()
                     else:
                         embed = discord.Embed(
-                                title="Error!",
+                                title="Failed",
                                 description="Sorry, you have not signed up " \
                                             "for this event.",
                                 colour=discord.Colour.red()
                                 )
 
             await ctx.respond(embed=embed)
+
+    chall = SlashCommandGroup('chall', 'Group of commands relating to challenges', guild_ids=config.beta_guilds)
+    
+    @chall.command(
+            description="Mark a challenge as in progress."
+    )
+    async def solved(self, ctx, chall_name: str, points: int=0):
+        # How this command should work
+        # 1. Get the CTF this challenge belongs to based on the channel this command is invoked in
+        # 2. Record the challenge in MySQL in the challenges table 
+        with mysql.connector.connect(
+                host="127.0.0.1",
+                port=3306,
+                database='ctfcord',
+                user='root',
+                password=config.MYSQL_PW
+        ) as cnx:
+            cursor = cnx.cursor()
+            cursor.execute(
+                    'SELECT id FROM ctf WHERE channel = %s',
+                    (ctx.channel.id,)
+            )
+            ctf = cursor.fetchone()[0]
+            cursor.execute(
+                    'REPLACE INTO challenges (name, points, ctf, solver, team, solved) '\
+                    'SELECT %s, %s, %s, m.member, t.id, 1 FROM teams AS t '\
+                    'INNER JOIN team_members AS m ON m.team = t.id '\
+                    'WHERE m.member = %s AND t.guild = %s',
+                    (chall_name, points, ctf, ctx.author.id, ctx.guild.id)
+            )
+            embed = discord.Embed(
+                    title='Congrats',
+                    description=f'<@!{ctx.author.id}> solved {chall_name}!',
+                    colour=discord.Colour.green()
+            )
+            cursor.execute(
+                    'SELECT name, points FROM challenges '\
+                    'WHERE solver = %s AND solved = 1',
+                    (ctx.author.id,)
+            )
+            solved = cursor.fetchall()
+            embed.add_field(
+                    name=f'You have solved:',
+                    value='\n'.join([chall[0] if chall[1] == 0 else f'{chall[0]} ({chall[1]} point)' for chall in solved])
+            )
+            cnx.commit()
+        await ctx.respond(embed=embed)
 
 def setup(bot):
     bot.add_cog(CTF(bot))
