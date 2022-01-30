@@ -7,6 +7,8 @@ services:
       MYSQL_DB: mysql
   mysql:
     build: ./mysql
+    volumes:
+      - ./mysql/mysqldata:/var/lib/mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ctfcord
