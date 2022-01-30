@@ -167,7 +167,7 @@ class CTF(commands.Cog):
                     )
                 # Add the ctf to the database
                 with mysql.connector.connect(
-                    host="127.0.0.1",
+                    host=config.MYSQL_DB,
                     port=3306,
                     username="root",
                     database="ctfcord",
@@ -343,7 +343,7 @@ class CTF(commands.Cog):
                 )
             else:
                 with mysql.connector.connect(
-                        host='127.0.0.1',
+                        host=config.MYSQL_DB,
                         port=3306,
                         database='ctfcord',
                         username='root',
@@ -447,7 +447,7 @@ class CTF(commands.Cog):
         # 1. Get the CTF this challenge belongs to based on the channel this command is invoked in
         # 2. Record the challenge in MySQL in the challenges table 
         with mysql.connector.connect(
-                host="127.0.0.1",
+                host=config.MYSQL_DB,
                 port=3306,
                 database='ctfcord',
                 user='root',

@@ -28,7 +28,7 @@ class Teams(commands.Cog):
     )
     async def create(self, ctx, name: str):
         with mysql.connector.connect(
-                host='127.0.0.1',
+                host=config.MYSQL_DB,
                 port=3306,
                 username='root',
                 database='ctfcord',
@@ -79,7 +79,7 @@ class Teams(commands.Cog):
     )
     async def delete(self, ctx):
         with mysql.connector.connect(
-                host='127.0.0.1',
+                host=config.MYSQL_DB,
                 port=3306,
                 username='root',
                 database='ctfcord',
@@ -87,7 +87,7 @@ class Teams(commands.Cog):
         ) as cnx:
             cursor = cnx.cursor()
             cursor.execute(
-                    'SELECT m.id FROM team_members AS m ' \
+                    'SELECT m.team FROM team_members AS m ' \
                     'INNER JOIN teams AS t ON m.team = t.id ' \
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
@@ -122,7 +122,7 @@ class Teams(commands.Cog):
     async def add(self, ctx, member: discord.Member):
         member = member.id
         with mysql.connector.connect(
-                host='127.0.0.1',
+                host=config.MYSQL_DB,
                 port=3306,
                 username='root',
                 database='ctfcord',
@@ -189,7 +189,7 @@ class Teams(commands.Cog):
     async def remove(self, ctx, member: discord.Member):
         member = member.id
         with mysql.connector.connect(
-                host='127.0.0.1',
+                host=config.MYSQL_DB,
                 port=3306,
                 database='ctfcord',
                 username='root',

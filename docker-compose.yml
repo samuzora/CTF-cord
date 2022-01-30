@@ -1,0 +1,13 @@
+services:
+  bot:
+    build: ./bot
+    environment:
+      CTFCORD_BOT_TOKEN: ${CTFCORD_BOT_TOKEN}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DB: mysql
+  mysql:
+    build: ./mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ctfcord
+

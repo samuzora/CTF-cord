@@ -12,8 +12,7 @@ import mysql.connector
 
 import config
 
-token = os.environ.get("CTFLITE_BOT_TOKEN")
-MYSQL_PW = os.getenv("MYSQL_PW")
+token = os.environ.get("CTFCORD_BOT_TOKEN")
 default_prefix = ";"
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
@@ -23,11 +22,11 @@ intents.members = True
 async def get_prefix(bot, message):
     if message.guild:
         with mysql.connector.connect(
-            host="127.0.0.1",
+            host=config.MYSQL_DB,
             port=3306,
             username="root",
             database="ctfcord",
-            password=MYSQL_PW,
+            password=config.MYSQL_PW,
         ) as cnx:
             cursor = cnx.cursor()
             cursor.execute(

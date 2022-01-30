@@ -1,0 +1,4 @@
+git+https://github.com/Pycord-Development/pycord#egg=py-cord
+requests==2.26.0
+regex==2021.11.10
+mysql-connector-python==8.0.27
