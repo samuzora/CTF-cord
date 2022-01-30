@@ -60,7 +60,7 @@ class Teams(commands.Cog):
                         title="Success!",
                         description="You have successfully created the team " \
                                 f"{name}! To add others into your team, use " \
-                                "the add command.",
+                                "the /team add command.",
                         colour=discord.Colour.green()
                 )
             else:
@@ -69,7 +69,7 @@ class Teams(commands.Cog):
                         title="Denied",
                         description="Sorry, you already belong to a team in " \
                                 "this guild. To leave a team, use " \
-                                "the leave command.",
+                                "the /team leave command.",
                         colour=discord.Colour.red()
                 )
         await ctx.respond(embed=embed)

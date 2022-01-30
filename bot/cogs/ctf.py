@@ -21,7 +21,7 @@ import config
 class CTF(commands.Cog):
     """ CTFs are managed here. With signup, you can register a CTF to take \
     part in, and never miss another CTF again with automatic Discord event \
-    scheduling! To view details about a CTF, use the details command."""
+    scheduling! To view details about a CTF, use /ctf details."""
 
     def __init__(self, bot):
         super().__init__()
