@@ -234,7 +234,7 @@ class CTF(commands.Cog):
                         # TODO: add discord inv
                         cursor.execute(
                                 "INSERT INTO ctf (id, title, description, start, " \
-                                    "finish, discord, team, scheduled_event) " \
+                                    "finish, team, scheduled_event) " \
                                 "SELECT %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
                                 "INNER JOIN team_members AS m ON m.team = t.id " \
                                 "WHERE m.member = %s AND t.guild = %s ",
