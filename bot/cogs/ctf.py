@@ -32,7 +32,17 @@ class CTF(commands.Cog):
     @ctf.command(
             description="View details about an event in a nicely formatted embed."
     )
-    async def details(self, ctx, ctftime_link: str):
+    async def details(self, ctx, ctftime_link: str=''):
+        if ctftime_link == '':
+            embed = discord.Embed(
+                    title="CTF name",
+                    description="Please send the CTF name in chat.", 
+                    colour=discord.Colour.green()
+            )
+            embed.set_footer(
+                    text="What's this? No CTFtime link was detected, so you are making a custom event now."
+            )
+            await ctx
         # Check whether the link is valid
         p = regex.match(
             "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
@@ -190,17 +200,17 @@ class CTF(commands.Cog):
                                 text="You have already signed up for this event!"
                         )
                         # Update the relevant information in case it has changed
+                        # TODO: add discord invite
                         cursor.execute(
                             "UPDATE ctf AS c " \
                             "INNER JOIN team_members AS m ON c.team = m.team " \
                             "INNER JOIN teams AS t ON m.team = t.id " \
-                            "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s " \
+                            "SET c.description = %s, c.start = %s, c.finish = %s, " \
                             "WHERE m.member = %s AND t.guild = %s",
                             (
                                 desc,
                                 int(time.mktime(start.timetuple())),
                                 int(time.mktime(finish.timetuple())),
-                                discord_inv.group(),
                                 ctx.author.id,
                                 ctx.guild.id
                             )
@@ -221,10 +231,11 @@ class CTF(commands.Cog):
                                 location=url
                         )
                         # Add CTF into db
+                        # TODO: add discord inv
                         cursor.execute(
                                 "INSERT INTO ctf (id, title, description, start, " \
                                     "finish, discord, team, scheduled_event) " \
-                                "SELECT %s, %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
+                                "SELECT %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
                                 "INNER JOIN team_members AS m ON m.team = t.id " \
                                 "WHERE m.member = %s AND t.guild = %s ",
                             (
@@ -233,7 +244,6 @@ class CTF(commands.Cog):
                                 desc,
                                 int(time.mktime(start.timetuple())),
                                 int(time.mktime(finish.timetuple())),
-                                discord_inv.group(),
                                 scheduled_event.id,
                                 ctx.author.id,
                                 ctx.guild.id
@@ -483,6 +493,66 @@ class CTF(commands.Cog):
             )
             cnx.commit()
         await ctx.respond(embed=embed)
+
+class CustomEvent(discord.ui.Select):
+    def __init__(self):
+        options = [
+                discord.SelectOption(
+                    label="CTF Name",
+                    description="Edit the CTF's name",
+                    value="title"
+                ),
+                discord.SelectOption(
+                    label="CTF Description",
+                    description="Edit the CTF's description",
+                    value="desc"
+                ),
+                discord.SelectOption(
+                    label="CTF Duration",
+                    description="Edit the duration of the CTF",
+                    value="start_end"
+                ),
+                discord.SelectOption(
+                    label="Discord Invite",
+                    description="Add a Discord Server invite, if there is one",
+                    value="discord_inv"
+                ),
+                discord.SelectOption(
+                    label="Done",
+                    description="Done editing the challenge?",
+                    emoji='✅',
+                    value="done"
+                ),
+                discord.SelectOption(
+                    label="Cancel",
+                    description="Discard changes",
+                    emoji='❌',
+                    value="cancel"
+                )
+        ]
+        super().__init__(
+                placeholder="Choose what to edit...",
+                min_values=1,
+                max_values=1,
+                options=options
+        )
+    async def callback(self, interaction: discord.Interaction):
+        # Check for wait_for(message)
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel
+
+        # Get value of option
+        option = self.values[0]
+        if option == "title":
+            r = await interaction.response.send_message(content="Please send the CTF's title in chat now.", ephemeral=True)
+            try:
+                title = await client.wait_for('message', check=check, timeout=60.0)
+            except:
+                await interaction.edit_original_message(content="Timeout")
+                return
+            else:
+                await interaction.delete_original_message()
+                await interaction.message.edit(embed=embed)
 
 def setup(bot):
     bot.add_cog(CTF(bot))
