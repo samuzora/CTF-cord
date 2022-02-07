@@ -139,9 +139,11 @@ class Teams(commands.Cog):
             team_id = (cursor.fetchone())[0]
             # Get list of users in team
             cursor.execute(
-                    'SELECT member FROM team_members ' \
-                    'WHERE team = %s',
-                    (team_id,)
+                    'SELECT m.member FROM team_members AS m' \
+                    'INNER JOIN teams AS t ' \
+                    'ON t.id = m.team '\
+                    'WHERE t.guild = %s AND m.team = %s',
+                    (ctx.guild.id, team_id)
             )
             team_members = cursor.fetchall()
             if (member,) in team_members:
@@ -170,9 +172,11 @@ class Teams(commands.Cog):
                         )
             # Refresh list in case of changes
             cursor.execute(
-                    'SELECT member FROM team_members ' \
-                    'WHERE team = %s',
-                    (team_id,)
+                    'SELECT member FROM team_members AS m ' \
+                    'INNER JOIN team AS t '\
+                    'ON t.id = m.team '\
+                    'WHERE t.guild = %s AND m.team = %s',
+                    (ctx.guild.id, team_id)
             )
             team_members = cursor.fetchall()
             # Add list of team_members
@@ -223,7 +227,7 @@ class Teams(commands.Cog):
                         'WHERE member = %s AND team = %s',
                         (member, team_id)
                 )
-                # Reduce team member count by ont
+                # Reduce team member count by one
                 cursor.execute(
                         'UPDATE teams SET members = members - 1 ' \
                         'WHERE id = %s',
