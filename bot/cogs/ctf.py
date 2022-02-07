@@ -284,8 +284,8 @@ class CTF(commands.Cog):
                         cursor.execute(
                                 'SELECT t.ctf_category FROM teams AS t ' \
                                 'INNER JOIN team_members AS m ON t.id = m.team ' \
-                                'WHERE m.member = %s',
-                                (ctx.author.id,)
+                                'WHERE m.member = %s AND t.guild = %s',
+                                (ctx.author.id, ctx.guild.id)
                         )
                         if (ctf_category := cursor.fetchone()) is None \
                                 or ctx.guild.get_channel(ctf_category[0]) not in ctx.guild.categories:
