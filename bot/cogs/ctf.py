@@ -272,7 +272,7 @@ class CTF(commands.Cog):
                                 'SELECT member FROM team_members AS m '\
                                 'INNER JOIN teams AS t '\
                                 'ON t.id = m.team '\
-                                'WHERE t.guild - %s AND m.team = %s',
+                                'WHERE t.guild = %s AND m.team = %s',
                                 (ctx.guild.id, team_id)
                         )
                         members = cursor.fetchall()
