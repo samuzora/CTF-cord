@@ -79,6 +79,8 @@ class CTF(commands.Cog):
                 event_info = json.loads(event_json)
                 title = event_info["title"]
                 desc = event_info["description"]
+                if len(desc) > 1000:
+                    desc = desc[:997] + '...'
                 participants = event_info["participants"]
                 # Timings are in ISO format - convert to datetime.datetime object
                 start = datetime.datetime.fromisoformat(event_info["start"])
@@ -146,13 +148,14 @@ class CTF(commands.Cog):
                     colour=discord.Colour.red(),
                 )
             else:
+                # TODO: Get stuff from db instead, and remove CTFtime api verification (in case event gets yeeted from CTFtime)
                 # Parse JSON
                 event_json = req.content
                 event_info = json.loads(event_json)
                 title = event_info["title"]
                 desc = event_info["description"]
-                if len(desc) > 4096:
-                    desc = desc[:4092] + '...'
+                if len(desc) > 1000:
+                    desc = desc[:997] + '...'
                 participants = event_info["participants"]
                 start = datetime.datetime.fromisoformat(event_info["start"])
                 finish = datetime.datetime.fromisoformat(event_info["finish"])
@@ -377,8 +380,8 @@ class CTF(commands.Cog):
                         event_info = json.loads(event_json)
                         title = event_info["title"]
                         desc = event_info["description"]
-                        if len(desc) > 4096:
-                            desc = desc[:4093] + '...'
+                        if len(desc) > 1000:
+                            desc = desc[:997] + '...'
                         participants = event_info["participants"]
                         start = datetime.datetime.fromisoformat(event_info["start"])
                         finish = datetime.datetime.fromisoformat(event_info["finish"])
