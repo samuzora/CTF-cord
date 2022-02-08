@@ -5,7 +5,7 @@ import time
 
 import discord
 from discord.commands import slash_command, SlashCommandGroup
-from discord.ext import commands
+from discord.ext import commands, tasks
 import mysql.connector
 import regex
 import requests
@@ -16,7 +16,8 @@ import config
 # TODO: Finish up /solving and /solved
 # TODO: At the end of a CTF, calculate the percentage of points each participant solved and archive the CTF 
 # TODO: Add /archive command to allow users to archive a CTF manually
-
+# TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
+# TODO: Add relevant people to relevant channels when they are added to team
 
 class CTF(commands.Cog):
     """ CTFs are managed here. With signup, you can register a CTF to take \
@@ -451,6 +452,76 @@ class CTF(commands.Cog):
                                 )
 
             await ctx.respond(embed=embed)
+    
+    @tasks.loop(seconds=300.0)
+    async def check_ctf(self):
+        with mysql.connector.connect(
+                host=config.MYSQL_DB,
+                port=3306,
+                database='ctfcord',
+                user='root',
+                password=config.MYSQL_PW
+        ) as cnx:
+            ctfs = cnx.cursor(dictionary=True)
+            cursor = cnx.cursor()
+            # Get all CTFs and the time which they start
+            ctfs.execute('SELECT * FROM ctf')
+            for ctf in ctfs:
+                if datetime.datetime.fromtimestamp(ctf['start']) == datetime.datetime.now():
+                    # CTF has started
+                    channel = self.bot.get_channel(ctf['channel'])
+                    # TODO: add option to turn off @everyone
+                    embed = discord.Embed(
+                            title=ctf['title'],
+                            description='@everyone This CTF has started!',
+                            colour=discord.Colour.blurple()
+                    )
+                    await channel.send(embed=embed)
+                    return
+                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1:
+                    # CTF will start in a day's time
+                    channel = self.bot.get_channel(ctf['channel'])
+                    embed = discord.Embed(
+                            title=ctf['title'],
+                            description='The CTF will start in 1 day!',
+                            colour=discord.Colour.blurple()
+                    )
+                    await channel.send(embed=embed)
+                    return
+                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['finish'])) > datetime.timedelta(0):
+                    # CTF is over, archive it
+                    channel = self.bot.get_channel(ctf['channel'])
+                    guild = channel.guild
+                    cursor.execute(
+                            'SELECT archived_category FROM teams '\
+                            'WHERE id = %s',
+                            (ctf['team'],)
+                    )
+                    archived = cursor.fetchone()[0]
+                    archived = self.bot.get_channel(archived)
+                    await channel.edit(category=archived)
+                    # Get all members in team and their scores
+                    cursor.execute(
+                            'SELECT solver, points FROM challenges '\
+                            'WHERE team = %s',
+                            (ctf['team'],)
+                    )
+                    challenges = cursor.fetchall()
+                    members = {}
+                    total = 0
+                    for c in challenges:
+                        if c[0] not in members:
+                            members[c[0]] = c[1]
+                        else:
+                            members[c[0]] += c[1]
+                        total += c[1]
+                    members = '\n'.join([f'{m}: {members[m]} points ({round(members[m] / total * 100, 1)}%)' for m in members])
+                    embed = discord.Embed(
+                            title=ctf['title'],
+                            description='@everyone The CTF has ended! Below are the percentage points of each team member:\n' + 'members',
+                            colour=discord.Colour.green()
+                            )
+                    await channel.send(embed=embed)
 
     chall = SlashCommandGroup('chall', 'Group of commands relating to challenges', guild_ids=config.beta_guilds)
     
@@ -498,7 +569,7 @@ class CTF(commands.Cog):
             )
             cnx.commit()
         await ctx.respond(embed=embed)
-
+    
 class CustomEvent(discord.ui.Select):
     def __init__(self):
         options = [
