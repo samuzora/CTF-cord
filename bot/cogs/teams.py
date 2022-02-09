@@ -46,7 +46,7 @@ class Teams(commands.Cog):
             if cursor.fetchone()[0] == 0:
                 # User doesn't have a team in this guild
                 cursor.execute(
-                        'INSERT INTO teams (title, members, guild)' \
+                        'INSERT INTO teams (title, members, guild) ' \
                         'VALUES (%s, 1, %s)',
                         (name, ctx.guild.id)
                 )
@@ -96,7 +96,7 @@ class Teams(commands.Cog):
                 # TODO: possibly remove this feature and instead only 
                 # allow users to leave a team, which is deleted when
                 # there are no users left
-                cursor.execute('DELETE FROM team_members WHERE id = %s',
+                cursor.execute('DELETE FROM team_members WHERE member = %s',
                         (team_id[0],)
                 )
                 cursor.execute('DELETE FROM teams WHERE id = %s',
@@ -136,10 +136,19 @@ class Teams(commands.Cog):
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
             )
-            team_id = (cursor.fetchone())[0]
+            if (team_id := cursor.fetchone()) == None:
+                embed = discord.Embed(
+                        title='Failed',
+                        description="Sorry, you don't have a team yet! Use /team create to make a new team.",
+                        colour=discord.Colour.red()
+                        )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
+            else:
+                team_id = team_id[0]
             # Get list of users in team
             cursor.execute(
-                    'SELECT m.member FROM team_members AS m' \
+                    'SELECT m.member FROM team_members AS m ' \
                     'INNER JOIN teams AS t ' \
                     'ON t.id = m.team '\
                     'WHERE t.guild = %s AND m.team = %s',
@@ -153,6 +162,8 @@ class Teams(commands.Cog):
                         description="This user is already in your team.",
                         colour=discord.Colour.red()
                 )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
             else:
                 # Member not in team
                 # Update team_member table
@@ -170,10 +181,25 @@ class Teams(commands.Cog):
                         description=f"Successfully added <@{member}> into team. Good luck!",
                         colour=discord.Colour.green()
                         )
+                # Add member to all CTF channels relevant to team
+                cursor.execute(
+                        'SELECT channel FROM ctf WHERE team = %s',
+                        (team_id,)
+                )
+                channels = cursor.fetchall()
+                for c in channels:
+                    try:
+                        channel = self.bot.get_channel((c[0]))
+                        overwrites = channel.overwrites
+                        overwrites[ctx.guild.get_member(member)] = discord.PermissionOverwrite(view_channel=True)
+                        await channel.edit(overwrites=overwrites)
+                    except AttributeError:
+                        pass
+                         
             # Refresh list in case of changes
             cursor.execute(
                     'SELECT member FROM team_members AS m ' \
-                    'INNER JOIN team AS t '\
+                    'INNER JOIN teams AS t '\
                     'ON t.id = m.team '\
                     'WHERE t.guild = %s AND m.team = %s',
                     (ctx.guild.id, team_id)
@@ -188,7 +214,7 @@ class Teams(commands.Cog):
             cnx.commit()
 
     @team_group.command(
-            description="Remove others from your team :<"
+            description="Remove others from your team"
     )
     async def remove(self, ctx, member: discord.Member):
         member = member.id
@@ -207,7 +233,16 @@ class Teams(commands.Cog):
                     'WHERE m.member = %s AND t.guild = %s',
                     (ctx.author.id, ctx.guild.id)
             )
-            team_id = (cursor.fetchone())[0]
+            if (team_id := cursor.fetchone()) == None:
+                embed = discord.Embed(
+                        title="Failed", 
+                        description="Sorry, you don't have a team yet! Use /team create to make a new team.",
+                        colour=discord.Colour.red()
+                )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
+            else:
+                team_id = team_id[0]
             # Get users in team
             cursor.execute(
                     'SELECT member FROM team_members WHERE team = %s',
@@ -220,6 +255,12 @@ class Teams(commands.Cog):
                         description="The user is not in your team.",
                         colour=discord.Colour.red()
                 )
+                embed.add_field(
+                    name="Members in your team",
+                    value='\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
+                )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
             else:
                 # Remove user from team_members table
                 cursor.execute(
@@ -238,16 +279,44 @@ class Teams(commands.Cog):
                         description=f"<@{member}> has been removed from your team. Good bye!",
                         colour=discord.Colour.green()
                 )
+                # Remove member from all ctf channels
+                cursor.execute(
+                        'SELECT channel FROM ctf WHERE team = %s',
+                        (team_id,)
+                )
+                channels = cursor.fetchall()
+                for c in channels:
+                    try:
+                        channel = self.bot.get_channel((c[0]))
+                        overwrites = channel.overwrites
+                        overwrites.pop(ctx.guild.get_member(member))
+                        await channel.edit(overwrites=overwrites)
+                    except AttributeError:
+                        pass
+
             # Refresh list of members
             cursor.execute(
                     'SELECT member FROM team_members WHERE team = %s',
                     (team_id,)
             )
             team_members = cursor.fetchall()
-            embed.add_field(
-                    name="Members in your team",
-                    value='\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
-            )
+            users = '\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
+            if users == '':
+                # The team has no more members
+                cursor.execute(
+                        'DELETE FROM teams ' \
+                        'WHERE id = %s',
+                        (team_id,)
+                )
+                embed.add_field(
+                        name='Members in your team', 
+                        value='There are no users left in your team, so this team has been deleted automatically.'
+                )
+            else:
+                embed.add_field(
+                        name="Members in your team",
+                        value='\n'.join([f'<@{team_member[0]}>' for team_member in team_members])
+                )
             await ctx.respond(embed=embed)
             cnx.commit()
 

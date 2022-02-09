@@ -12,9 +12,7 @@ import requests
 
 import config
 
-# TODO: Update /signup to add 0 value to column archived in ctf
 # TODO: Finish up /solving and /solved
-# TODO: At the end of a CTF, calculate the percentage of points each participant solved and archive the CTF 
 # TODO: Add /archive command to allow users to archive a CTF manually
 # TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
 # TODO: Add relevant people to relevant channels when they are added to team
@@ -238,8 +236,8 @@ class CTF(commands.Cog):
                         # TODO: add discord inv
                         cursor.execute(
                                 "INSERT INTO ctf (id, title, description, start, " \
-                                    "finish, team, scheduled_event) " \
-                                "SELECT %s, %s, %s, %s, %s, t.id, %s FROM teams AS t " \
+                                    "finish, team, scheduled_event, archived) " \
+                                "SELECT %s, %s, %s, %s, %s, t.id, %s, 0 FROM teams AS t " \
                                 "INNER JOIN team_members AS m ON m.team = t.id " \
                                 "WHERE m.member = %s AND t.guild = %s ",
                             (
@@ -521,8 +519,9 @@ class CTF(commands.Cog):
                             description='@everyone The CTF has ended! Below are the percentage points of each team member:\n' + 'members',
                             colour=discord.Colour.green()
                             )
+                    cursor.execute('UPDATE ctf SET archived = 0 WHERE ctf = %s AND team = %s', (ctf['id'], ctf['team']))
+                    cnx.commit()
                     await channel.send(embed=embed)
-
     chall = SlashCommandGroup('chall', 'Group of commands relating to challenges', guild_ids=config.beta_guilds)
     
     @chall.command(
