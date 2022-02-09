@@ -9,6 +9,8 @@ import mysql.connector
 
 import config
 
+# TODO: Hand over team management to roles. Keep /team add and /team remove, but don't get teams based on database. This will allow multiple teams per user per guild. (BIG REWORK!!)
+
 class Teams(commands.Cog):
     """ Teams are groups of people that you usually play CTFs with. Creating \
     a team allows you to manage CTFs, split challenges to solve in an \

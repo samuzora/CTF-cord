@@ -15,6 +15,7 @@ import config
 # TODO: Finish up /solving and /solved
 # TODO: Add /archive command to allow users to archive a CTF manually
 # TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
+# TODO: Allow users to define custom events that are not in CTFtime
 
 class CTF(commands.Cog):
     """ CTFs are managed here. With signup, you can register a CTF to take \
@@ -32,6 +33,9 @@ class CTF(commands.Cog):
     )
     async def details(self, ctx, ctftime_link: str=''):
         if ctftime_link == '':
+            await ctx.respond('Sorry, not implemented yet.', ephemeral=True)
+            return
+            """
             embed = discord.Embed(
                     title="CTF name",
                     description="Please send the CTF name in chat.", 
@@ -39,8 +43,8 @@ class CTF(commands.Cog):
             )
             embed.set_footer(
                     text="What's this? No CTFtime link was detected, so you are making a custom event now."
-            )
-            await ctx
+            )"""
+
         # Check whether the link is valid
         p = regex.match(
             "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
@@ -563,7 +567,7 @@ class CTF(commands.Cog):
             )
             embed = discord.Embed(
                     title='Congrats',
-                    description=f'<@!{ctx.author.id}> solved `{chall_name}`!',
+                    description=f'<@!{ctx.author.id}> solved **{chall_name}**!',
                     colour=discord.Colour.green()
             )
             cursor.execute(
