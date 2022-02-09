@@ -15,7 +15,6 @@ import config
 # TODO: Finish up /solving and /solved
 # TODO: Add /archive command to allow users to archive a CTF manually
 # TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
-# TODO: Add relevant people to relevant channels when they are added to team
 
 class CTF(commands.Cog):
     """ CTFs are managed here. With signup, you can register a CTF to take \
@@ -543,7 +542,18 @@ class CTF(commands.Cog):
                     'SELECT id FROM ctf WHERE channel = %s',
                     (ctx.channel.id,)
             )
-            ctf = cursor.fetchone()[0]
+            if (ctf := cursor.fetchone()) == None:
+                # Not invoked in a CTF's channel
+                # TODO: Check if the CTF has started yet
+                embed = discord.Embed(
+                        title='Failed',
+                        description='You can only invoke this command in a channel registered via /ctf signup.',
+                        colour=discord.Colour.red()
+                        )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
+            else:
+                ctf = ctf[0]
             cursor.execute(
                     'REPLACE INTO challenges (name, points, ctf, solver, team, solved) '\
                     'SELECT %s, %s, %s, m.member, t.id, 1 FROM teams AS t '\
@@ -553,7 +563,7 @@ class CTF(commands.Cog):
             )
             embed = discord.Embed(
                     title='Congrats',
-                    description=f'<@!{ctx.author.id}> solved {chall_name}!',
+                    description=f'<@!{ctx.author.id}> solved `{chall_name}`!',
                     colour=discord.Colour.green()
             )
             cursor.execute(
@@ -564,7 +574,7 @@ class CTF(commands.Cog):
             solved = cursor.fetchall()
             embed.add_field(
                     name=f'You have solved:',
-                    value='\n'.join([chall[0] if chall[1] == 0 else f'{chall[0]} ({chall[1]} point)' for chall in solved])
+                    value='\n'.join([f'**{chall[0]}**' if chall[1] == 0 else f'**{chall[0]}** ({chall[1]} points)' for chall in solved])
             )
             cnx.commit()
         await ctx.respond(embed=embed)
