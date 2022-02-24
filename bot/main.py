@@ -106,85 +106,8 @@ async def on_command_error(ctx, e):
     await ctx.send(embed=embed)
 
 
-# Help command implementation
-class Help(commands.HelpCommand):
-    def __config__(self):
-        super().__config__()
-
-    # Shown as default help
-    async def send_bot_help(self, mapping):
-        embed = discord.Embed(title="halp", colour=discord.Colour.blurple())
-        embed.add_field(
-            name=f"To find out more about a command, use {config.prefix}help <command>. eg:",
-            value=f"```{config.prefix}help flag```",
-        )
-        for cog in mapping:
-            if cog is not None:
-                value = ""
-                for command in mapping[cog]:
-                    try: 
-                        await command.can_run(self.context)
-                    except:
-                        value += f"❌ `{config.prefix}{command.name}`\n"
-                    else:
-                        value += f"✅ `{config.prefix}{command.name}`\n"
-                embed.add_field(name=cog.qualified_name, value=value, inline=False)
-        embed.set_footer(
-            text="✅ indicates commands that you can run, while ❌ indicates commands that you cannot run in this context."
-        )
-        await self.get_destination().send(embed=embed)
-
-    # Shown when user specfies a cog
-    async def send_cog_help(self, cog):
-        embed = discord.Embed(
-            title=cog.qualified_name,
-            description=cog.description,
-            colour=discord.Colour.blurple(),
-        )
-        for command in cog.walk_commands():
-            try:
-                await command.can_run(self.context)
-            except:
-                embed.add_field(
-                        name=f'❌ `{config.prefix}{command.name}`',
-                        value=command.brief,
-                        inline=False
-                )
-            else:
-                embed.add_field(
-                        name=f'✅ `{config.prefix}{command.name}`', 
-                        value=command.brief, 
-                        inline=False
-                )
-        await self.get_destination().send(embed=embed)
-
-    # Shown when user specifies a command
-    async def send_command_help(self, command):
-        embed = discord.Embed(
-            title=command.name,
-            description=command.description,
-            colour=discord.Colour.blurple(),
-        )
-        embed.add_field(
-            name="Usage",
-            value=f"```{config.prefix}{command.name} {command.usage}```",
-            inline=False,
-        )
-        try:
-            await command.can_run(self.context)
-        except:
-            embed.set_footer(
-                    text='❌ You cannot run this command in this context.'
-            )
-        else:
-            embed.set_footer(
-                    text='✅ You can run this command!'
-            )
-        await self.get_destination().send(embed=embed)
-    
-
 if __name__ == "__main__":
     bot.load_extension("cogs.ctf")
     bot.load_extension("cogs.teams")
-    bot.help_command = Help()
+    bot.load_extension("cogs.chall")
     bot.run(token)

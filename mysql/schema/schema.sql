@@ -43,16 +43,21 @@ DROP TABLE IF EXISTS `ctf`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `ctf` (
-  `id` int NOT NULL,
+  `id` int NOT NULL AUTO_INCREMENT,
+  `ctftime_id` int,
   `title` varchar(255) NOT NULL,
   `description` text NOT NULL,
   `start` int NOT NULL,
   `finish` int NOT NULL,
   `discord` varchar(255) DEFAULT NULL,
-  `team` int DEFAULT NULL,
+  `team` int NOT NULL,
   `scheduled_event` bigint DEFAULT NULL,
+  `participants` int DEFAULT NULL,
+  `url` varchar(255) DEFAULT NULL,
+  `logo` varchar(255) DEFAULT NULL,
   `channel` bigint DEFAULT NULL,
-  `archived` tinyint(1) DEFAULT NULL
+  `archived` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -79,8 +84,10 @@ DROP TABLE IF EXISTS `team_members`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `team_members` (
+  `id` int NOT NULL AUTO_INCREMENT,
   `team` int NOT NULL,
-  `member` bigint NOT NULL
+  `member` bigint NOT NULL,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

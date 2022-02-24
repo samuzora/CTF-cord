@@ -45,36 +45,35 @@ class Teams(commands.Cog):
                     'WHERE m.member = %s AND t.guild = %s', 
                     (ctx.author.id, ctx.guild.id)
             )
-            if cursor.fetchone()[0] == 0:
-                # User doesn't have a team in this guild
-                cursor.execute(
-                        'INSERT INTO teams (title, members, guild) ' \
-                        'VALUES (%s, 1, %s)',
-                        (name, ctx.guild.id)
-                )
-                cursor.execute(
-                        'INSERT INTO team_members '
-                        'SELECT id, %s FROM teams',
-                        (ctx.author.id,)
-                )
-                cnx.commit()
-                embed = discord.Embed(
-                        title="Success!",
-                        description="You have successfully created the team " \
-                                f"{name}! To add others into your team, use " \
-                                "the /team add command.",
-                        colour=discord.Colour.green()
-                )
-            else:
-                # User has a team in this guild
-                embed = discord.Embed(
-                        title="Denied",
-                        description="Sorry, you already belong to a team in " \
-                                "this guild. To leave a team, use " \
-                                "the /team leave command.",
-                        colour=discord.Colour.red()
-                )
-        await ctx.respond(embed=embed)
+            if cursor.fetchone()[0] != 0:
+                # User already has a team in this guild
+                await ctx.respond("Sorry, you already have a team in this "\
+                        "guild. Due to limitations, as of now you can only "\
+                        "be in one team per guild.", ephemeral=True)
+                return
+            # User doesn't have a team in this guild
+            cursor.execute(
+                    'INSERT INTO teams (title, members, guild) ' \
+                    'VALUES (%s, 1, %s)',
+                    (name, ctx.guild.id)
+            )
+            # Get the uid of the team
+            cursor.execute('SELECT LAST_INSERT_ID()')
+            team_id = cursor.fetchone()
+            cursor.execute(
+                    'INSERT INTO team_members (team, member) '\
+                    'VALUES (%s, %s)',
+                    (team_id[0], ctx.author.id)
+            )
+            embed = discord.Embed(
+                    title="Success!",
+                    description="You have successfully created the team " \
+                            f"{name}! To add others into your team, use " \
+                            "the /team add command.",
+                    colour=discord.Colour.green()
+            )
+            cnx.commit()
+            await ctx.respond(embed=embed)
             
     @team_group.command(
             description="Deletes a team. This is irrversible."
