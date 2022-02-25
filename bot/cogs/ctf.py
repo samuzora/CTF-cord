@@ -17,7 +17,7 @@ import config
 # TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
 # TODO: Allow users to define custom events that are not in CTFtime
 
-def get_ctf_details(event_id):
+async def get_ctf_details(event_id):
     # Required, if not CTFtime will 403
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0",
