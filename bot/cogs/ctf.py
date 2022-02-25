@@ -188,7 +188,7 @@ class CTF(commands.Cog):
                 "SELECT t.id FROM ctf AS c " \
                 "INNER JOIN team_members AS m ON c.team = m.team " \
                 "INNER JOIN teams AS t ON m.team = t.id " \
-                "WHERE c.id = %s AND t.guild = %s AND m.member = %s",
+                "WHERE c.ctftime_id = %s AND t.guild = %s AND m.member = %s",
                 (event_id, ctx.guild.id, ctx.author.id)
             ) 
             if (team_id := cursor.fetchone()) is not None:
