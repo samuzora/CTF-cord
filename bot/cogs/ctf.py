@@ -92,7 +92,7 @@ class CTF(commands.Cog):
         embed.url = event_info['url']
         if discord_inv := regex.search(
             "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
-            event_info['desc'],
+            event_info['description'],
         ):
             # Discord invite link found
             embed.add_field(
@@ -140,7 +140,7 @@ class CTF(commands.Cog):
         # Try to grab the event ID from the ctftime_link
         event = regex.search("[0-9]+", ctftime_link)
         event_id = event.group()
-        event_info = get_ctf_details(event_id)
+        event_info = await get_ctf_details(event_id)
         # Check if CTF timing is valid
         if datetime.datetime.now(datetime.timezone.utc) > event_info['finish']:
             # CTF has already ended
@@ -327,7 +327,6 @@ class CTF(commands.Cog):
     @ctf.command(description="Un-signup for a CTF, unregistering it from the bot.")
     async def unsignup(self, ctx, ctftime_link: str):
         # TODO: Delete custom events
-        await ctx.defer()
         # Check whether the link is valid
         p = regex.match(
             "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
@@ -371,6 +370,8 @@ class CTF(commands.Cog):
                 )
                 await ctx.respond(embed=embed, ephemeral=True)
                 return
+            # Safe to defer now
+            await ctx.defer()
             # Team signed up for this CTF
             title = ctf['title']
             desc = ctf['description']
@@ -422,7 +423,7 @@ class CTF(commands.Cog):
             try:
                 await channel.delete()
             except:
-                pass
+                print('Channel could not be deleted...')
             # Delete CTF from db
             cursor.execute(
                     'DELETE FROM ctf WHERE id = %s',
