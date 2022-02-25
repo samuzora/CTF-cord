@@ -81,8 +81,8 @@ class CTF(commands.Cog):
             await ctx.respond(embed=embed, ephemeral=True)
             return
         # Format embed
-        embed = discord.Embed(title=event_info['title'], description=event_info['desc'], colour=discord.Colour.blurple())
-        embed.set_thumbnail(url=event_info['logo_url'])
+        embed = discord.Embed(title=event_info['title'], description=event_info['description'], colour=discord.Colour.blurple())
+        embed.set_thumbnail(url=event_info['logo'])
         embed.add_field(name="Starts at", value=discord.utils.format_dt(event_info['start']))
         embed.add_field(name="Ends at", value=discord.utils.format_dt(event_info['finish']))
         embed.add_field(name="CTFtime", value=f"<https://ctftime.org/event/{event_id}>")
