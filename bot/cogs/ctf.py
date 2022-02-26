@@ -410,19 +410,29 @@ class CTF(commands.Cog):
             for ctf in ctfs:
                 channel = self.bot.get_channel(ctf['channel'])
                 if channel == None:
-                    cursor.execute('UPDATE ctf SET archived = 0 WHERE id = %s AND team = %s', (ctf['id'], ctf['team']))
+                    cursor.execute('UPDATE ctf SET archived = 1 WHERE id = %s', (ctf['id'],))
                     cnx.commit()
                     continue
-                if datetime.datetime.fromtimestamp(ctf['start']) == datetime.datetime.now():
+                if datetime.datetime.fromtimestamp(ctf['start']) <= datetime.datetime.now() and ctf['reminded'] != 2:
                     # CTF has started
+                    cursor.execute(
+                            'UPDATE ctf SET reminded = 2'\
+                            'WHERE id = %s',
+                            (ctf['id'])
+                    )
                     # TODO: add option to turn off @everyone
                     embed = discord.Embed(
                             title=ctf['title'],
                             description='@everyone This CTF has started!',
                             colour=discord.Colour.blurple()
                     )
-                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1:
+                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1 and ctf['reminded'] != 1:
                     # CTF will start in a day's time
+                    cursor.execute(
+                            'UPDATE ctf SET reminded = 1 '\
+                            'WHERE id = %s',
+                            (ctf['id'],)
+                    )
                     embed = discord.Embed(
                             title=ctf['title'],
                             description='The CTF will start in 1 day!',
@@ -444,9 +454,7 @@ class CTF(commands.Cog):
                                 'WHERE id = %s', 
                                 (archived.id, ctf['team'])
                         )
-                    print(archived)
                     archived = self.bot.get_channel(archived)
-                    print(archived)
                     await channel.edit(category=archived)
                     # Get all members in team and their scores
                     cursor.execute(
