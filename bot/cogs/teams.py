@@ -29,13 +29,7 @@ class Teams(commands.Cog):
             description="Creates a team so you can use this bot with others!"
     )
     async def create(self, ctx, name: str):
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                username='root',
-                database='ctfcord',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             # Check if user is in a team in this guild
             # Right now, one user is limited to one team per guild 
@@ -79,13 +73,7 @@ class Teams(commands.Cog):
             description="Deletes a team. This is irrversible."
     )
     async def delete(self, ctx):
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                username='root',
-                database='ctfcord',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             cursor.execute(
                     'SELECT m.team FROM team_members AS m ' \
@@ -122,13 +110,7 @@ class Teams(commands.Cog):
     )
     async def add(self, ctx, member: discord.Member):
         member = member.id
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                username='root',
-                database='ctfcord',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             # Get the invoker's team
             cursor.execute(
@@ -219,13 +201,7 @@ class Teams(commands.Cog):
     )
     async def remove(self, ctx, member: discord.Member):
         member = member.id
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                database='ctfcord',
-                username='root',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             # Get the invoker's team
             cursor.execute(

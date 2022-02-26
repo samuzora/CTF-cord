@@ -39,13 +39,7 @@ class Challenges(commands.Cog):
             description="Mark a challenge solved."
     )
     async def solved(self, ctx, chall_name: str, points: int=0):
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                database='ctfcord',
-                user='root',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             cursor.execute(
                     'SELECT id, start, finish FROM ctf WHERE channel = %s',

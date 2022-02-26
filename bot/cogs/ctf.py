@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 import time
 
@@ -175,13 +176,7 @@ class CTF(commands.Cog):
         # Deferring is necessary as the heavy db operations later on might cause the app to not respond in time (3s)
         await ctx.defer()
         # Add the ctf to the database
-        with mysql.connector.connect(
-            host=config.MYSQL_DB,
-            port=3306,
-            username="root",
-            database="ctfcord",
-            password=config.MYSQL_PW,
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             # Check if the user's team has registered this CTF already
             cursor.execute(
@@ -205,7 +200,7 @@ class CTF(commands.Cog):
                     "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s, c.participants = %s " \
                     "WHERE m.member = %s AND t.guild = %s",
                     (
-                        event_info['desc'],
+                        event_info['description'],
                         int(time.mktime(event_info['start'].timetuple())),
                         int(time.mktime(event_info['finish'].timetuple())),
                         discord_inv,
@@ -232,28 +227,6 @@ class CTF(commands.Cog):
                     end_time=event_info['finish'],
                     location=event_info['url']
             )
-            # Add CTF into db
-            cursor.execute(
-                    "INSERT INTO ctf (ctftime_id, title, description, start, " \
-                        "finish, discord, participants, url, logo, team, scheduled_event, archived) " \
-                    "SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, t.id, %s, 0 FROM teams AS t " \
-                    "INNER JOIN team_members AS m ON m.team = t.id " \
-                    "WHERE m.member = %s AND t.guild = %s ",
-                (
-                    event_id,
-                    event_info['title'],
-                    event_info['description'],
-                    int(time.mktime(event_info['start'].timetuple())),
-                    int(time.mktime(event_info['finish'].timetuple())),
-                    discord_inv,
-                    event_info['participants'],
-                    event_info['url'],
-                    event_info['logo'],
-                    scheduled_event.id,
-                    ctx.author.id,
-                    ctx.guild.id
-                )
-            ) 
             # Create new text channel for the CTF
             # Get list of members to update perms for channel
             # Default perms to view_channel = False
@@ -312,12 +285,29 @@ class CTF(commands.Cog):
                     overwrites=perms,
                     category=ctf_category
             ) 
-            # Save channel in db
+            # Add CTF into db
             cursor.execute(
-                    'UPDATE ctf SET channel = %s '\
-                    'WHERE id = %s',
-                    (ctf_channel.id, event_id)
-            )
+                    "INSERT INTO ctf (ctftime_id, title, description, start, " \
+                        "finish, discord, participants, url, logo, team, scheduled_event, channel, archived) " \
+                    "SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, t.id, %s, %s, 0 FROM teams AS t " \
+                    "INNER JOIN team_members AS m ON m.team = t.id " \
+                    "WHERE m.member = %s AND t.guild = %s ",
+                (
+                    event_id,
+                    event_info['title'],
+                    event_info['description'],
+                    int(time.mktime(event_info['start'].timetuple())),
+                    int(time.mktime(event_info['finish'].timetuple())),
+                    discord_inv,
+                    event_info['participants'],
+                    event_info['url'],
+                    event_info['logo'],
+                    scheduled_event.id,
+                    ctf_channel.id,
+                    ctx.author.id,
+                    ctx.guild.id
+                )
+            ) 
             # Commit changes
             cnx.commit()
         await ctx.respond(embed=embed)
@@ -333,23 +323,12 @@ class CTF(commands.Cog):
         )
         if p is None and regex.match("[0-9]+", ctftime_link) is None:
             # The link is neither valid nor a possible CTFtime event ID
-            embed = discord.Embed(
-                title="Failed",
-                description="Sorry, this isn't a valid CTFtime event link or id.",
-                colour=discord.Colour.red(),
-            )
-            await ctx.respond(embed=embed, ephemeral=True)
+            await ctx.respond(f'{ctftime_link} is not a valid CTFtime event ID or link', ephemeral=True)
             return
         # Try to grab the event ID from the link
         event = regex.search("[0-9]+", ctftime_link)
         event_id = event.group()
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                database='ctfcord',
-                username='root',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             cursor = cnx.cursor()
             # Check if the team has registered this CTF
             ctf = cnx.cursor(dictionary=True)
@@ -360,15 +339,10 @@ class CTF(commands.Cog):
                     'WHERE c.ctftime_id = %s AND t.guild = %s AND m.member = %s',
                     (event_id, ctx.guild.id, ctx.author.id)
             )
+            # FIXME: Might want to add an exception for multiple CTFs, so the command doesn't break down if somehow 2 identical CTFs slip through
             if (ctf := ctf.fetchone()) is None:
                 # Team didn't sign up for this CTF
-                embed = discord.Embed(
-                        title="Failed",
-                        description="Sorry, you have not signed up " \
-                                    "for this event.",
-                        colour=discord.Colour.red()
-                )
-                await ctx.respond(embed=embed, ephemeral=True)
+                await ctx.respond("Sorry, you haven't signed up for this CTF", ephemeral=True)
                 return
             # Safe to defer now
             await ctx.defer()
@@ -381,7 +355,7 @@ class CTF(commands.Cog):
             url = ctf['url']
             logo_url = ctf['logo']
             # Format embed
-            embed = discord.Embed(title=title, description=desc)
+            embed = discord.Embed(title=title, description=desc, colour=discord.Colour.green())
             embed.set_thumbnail(url=logo_url)
             embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
             embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
@@ -406,24 +380,13 @@ class CTF(commands.Cog):
             try:
                 await scheduled_event.delete()
             except:
-                embed.add_field(
-                    name="Scheduled Discord event",
-                    value="The event could not be found, please try deleting it manually."
-                )
-                embed.colour = discord.Colour.blurple()
-            else:
-                embed.colour = discord.Colour.green()
+                pass
             # Delete CTF channel
-            cursor.execute(
-                    'SELECT channel FROM ctf '\
-                    'WHERE id = %s',
-                    (ctf['id'],)
-            )
-            channel = ctx.guild.get_channel(cursor.fetchone()[0])
+            channel = ctx.guild.get_channel(ctf['channel'])
             try:
                 await channel.delete()
             except:
-                print('Channel could not be deleted...')
+                pass
             # Delete CTF from db
             cursor.execute(
                     'DELETE FROM ctf WHERE id = %s',
@@ -432,18 +395,13 @@ class CTF(commands.Cog):
             embed.set_footer(
                     text="The event has been successfully unregistered."
             )
+            cnx.commit()
             await ctx.respond(embed=embed)
     
 
     @tasks.loop(seconds=10.0)
     async def check_ctf(self):
-        with mysql.connector.connect(
-                host=config.MYSQL_DB,
-                port=3306,
-                database='ctfcord',
-                user='root',
-                password=config.MYSQL_PW
-        ) as cnx:
+        with config.Connect() as cnx:
             ctfs = cnx.cursor(dictionary=True)
             cursor = cnx.cursor()
             # Get all unarchived CTFs and the time which they start
@@ -662,13 +620,7 @@ class CustomEvent(discord.ui.Select):
                 else:
                     await interaction.response.edit_original_message(content="That doesn't seem like a valid Discord invite!", delete_after=5.0)
         elif option == 'done':
-            with mysql.connector.connect(
-                    host=config.MYSQL_DB,
-                    port=3306,
-                    database='ctfcord',
-                    user='root',
-                    password=config.MYSQL_PW
-            ) as cnx:
+            with config.Connect() as cnx:
                 cursor = cnx.cursor()
                 cursor.execute('SELECT t.ctf_category, t.id FROM teams AS t '\
                         'INNER JOIN team_members AS m '\
