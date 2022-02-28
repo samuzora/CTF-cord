@@ -410,6 +410,7 @@ class CTF(commands.Cog):
             for ctf in ctfs:
                 channel = self.bot.get_channel(ctf['channel'])
                 if channel == None:
+                    # Channel can't be found, we can treat this CTF as archived as we can't send any reminders
                     cursor.execute('UPDATE ctf SET archived = 1 WHERE id = %s', (ctf['id'],))
                     cnx.commit()
                     continue
@@ -418,7 +419,7 @@ class CTF(commands.Cog):
                     cursor.execute(
                             'UPDATE ctf SET reminded = 2'\
                             'WHERE id = %s',
-                            (ctf['id'])
+                            (ctf['id'],)
                     )
                     # TODO: add option to turn off @everyone
                     embed = discord.Embed(
