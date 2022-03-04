@@ -85,7 +85,7 @@ class Teams(commands.Cog):
                 # TODO: possibly remove this feature and instead only 
                 # allow users to leave a team, which is deleted when
                 # there are no users left
-                cursor.execute('DELETE FROM team_members WHERE member = %s',
+                cursor.execute('DELETE FROM team_members WHERE team = %s',
                         (team_id[0],)
                 )
                 cursor.execute('DELETE FROM teams WHERE id = %s',
@@ -151,7 +151,7 @@ class Teams(commands.Cog):
                 # Member not in team
                 # Update team_member table
                 cursor.execute(
-                        'INSERT INTO team_members VALUES (%s, %s)',
+                        'INSERT INTO team_members (team, member) VALUES (%s, %s)',
                         (team_id, member)
                 )
                 # Update size of team
