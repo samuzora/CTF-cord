@@ -96,9 +96,10 @@ class CTF(commands.Cog):
             event_info['description'],
         ):
             # Discord invite link found
+            discord_inv = discord_inv.group()
             embed.add_field(
                 name="Discord Server",
-                value=f"[Click here to join]({discord_inv.group()})",
+                value=f"[Click here to join]({discord_inv})",
             )
         await ctx.respond(embed=embed)
 
@@ -168,9 +169,10 @@ class CTF(commands.Cog):
             event_info['description'],
         ):
             # Discord invite found
+            discord_inv = discord_inv.group()
             embed.add_field(
                 name="Discord Server",
-                value=f"[Click here to join]({discord_inv.group()})",
+                value=f"[Click here to join]({discord_inv})",
             )
         # There shouldn't be any exceptions from here on, so we don't need to worry abt ephemeral
         # Deferring is necessary as the heavy db operations later on might cause the app to not respond in time (3s)
@@ -366,9 +368,10 @@ class CTF(commands.Cog):
                 desc
             ):
                 # Discord invite found
+                discord_inv = discord_inv.group()
                 embed.add_field(
                     name="Discord Server",
-                    value=f"[Click here to join]({discord_inv.group()})"
+                    value=f"[Click here to join]({discord_inv})"
                 )
             # Delete scheduled event
             cursor.execute(
