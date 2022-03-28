@@ -6,6 +6,7 @@ MYSQL_PW = os.getenv('MYSQL_ROOT_PASSWORD')
 MYSQL_DB = os.getenv('MYSQL_DB')
 prefix = None
 beta_guilds = [a.strip() for a in open('beta_guilds.txt').readlines()]
+beta_guilds = beta_guilds if beta_guilds != [] else None
 
 # --- class to connect to db ---
 class Connect():
