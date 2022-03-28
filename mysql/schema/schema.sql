@@ -63,36 +63,6 @@ CREATE TABLE `ctf` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `guilds`
---
-
-DROP TABLE IF EXISTS `guilds`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `guilds` (
-  `id` bigint NOT NULL,
-  `title` varchar(30) NOT NULL,
-  `prefix` varchar(10) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `team_members`
---
-
-DROP TABLE IF EXISTS `team_members`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `team_members` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `team` int NOT NULL,
-  `member` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `teams`
 --
 
@@ -102,8 +72,8 @@ DROP TABLE IF EXISTS `teams`;
 CREATE TABLE `teams` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(50) NOT NULL,
-  `members` int NOT NULL,
-  `ctftime` varchar(31) DEFAULT NULL,
+  `role` bigint NOT NULL,
+  `members` int DEFAULT NULL,
   `guild` bigint DEFAULT NULL,
   `ctf_category` bigint DEFAULT NULL,
   `archived_category` bigint DEFAULT NULL,
@@ -111,19 +81,7 @@ CREATE TABLE `teams` (
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `users`
---
 
-DROP TABLE IF EXISTS `users`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `users` (
-  `id` int NOT NULL,
-  `username` varchar(32) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

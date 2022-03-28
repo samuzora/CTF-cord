@@ -1,226 +1,172 @@
+import asyncio
 import datetime
 import json
 import logging
 import os
 import time
 
+from dateutil import parser
 import discord
 from discord.commands import slash_command, SlashCommandGroup
 from discord.ext import commands, tasks
-import mysql.connector
 import regex
 import requests
 
 import config
 
-# TODO: Finish up /solving and /solved
 # TODO: Add /archive command to allow users to archive a CTF manually
-# TODO: Support adding roles inside teams, and ping related roles when a CTF approaches 
-# TODO: Allow users to define custom events that are not in CTFtime
+# TODO: Support adding roles inside teams, and ping related roles when a CTF approaches
+# TODO: Allow users to define custom CTF/archive category channels in a configuaration interface
 
+# --- internal command to get CTF details ---
 async def get_ctf_details(event_id):
-    # Required, if not CTFtime will 403
+    # CTFtime will 403 if this is not added
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0",
+            "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0"
     }
-    # Get JSON via API
+    # Grab JSON via API
     req = requests.get(
-        f"https://ctftime.org/api/v1/events/{event_id}/", headers=headers
+            f'https://ctftime.org/api/v1/events/{event_id}/', headers=headers,
     )
     if req.status_code == 404:
+        # API returned 404
         return 404
     # ID is valid
-    event_json = req.content
-    event_info = json.loads(event_json)
+    event_info = json.loads(req.content)
     if len(event_info['description']) > 1000:
         event_info['description'] = event_info['description'][:997] + '...'
-    participants = event_info["participants"]
-    # Timings are in ISO format - convert to datetime.datetime object
-    event_info['start'] = datetime.datetime.fromisoformat(event_info["start"])
-    event_info['finish'] = datetime.datetime.fromisoformat(event_info["finish"])
+    event_info['start'] = datetime.datetime.fromisoformat(event_info['start'])
+    event_info['finish'] = datetime.datetime.fromisoformat(event_info['finish'])
+    event_info['discord_inv'] = regex.search(
+            '((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?',
+            event_info['description'],
+    )
     return event_info
 
+
+
+# --- /ctf --- 
 class CTF(commands.Cog):
-    """ CTFs are managed here. With signup, you can register a CTF to take \
+    ''' CTFs are managed here. With /ctf signup, you can register a CTF to take \
     part in, and never miss another CTF again with automatic Discord event \
-    scheduling! To view details about a CTF, use /ctf details."""
+    scheduling! To view details about a CTF, use /ctf details.'''
+
 
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
         self.check_ctf.start()
 
+
+    # --- slash command group ---
     ctf = SlashCommandGroup('ctf', 'Group of commands for CTF management', guild_ids=config.beta_guilds)
 
 
-    @ctf.command(description="View details about an event in a nicely formatted embed.")
+    # --- /ctf details ---
+    @ctf.command(description='View details about an event in a nicely formatted embed.')
     async def details(self, ctx, ctftime_link: str):
-        # Check whether the link is valid
-        p = regex.match(
-            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
-        )
-        if p is None and regex.match("[0-9]+", ctftime_link) is None:
-            # The link is neither valid nor a possible CTFtime event ID
-            embed = discord.Embed(
-                title="Error!",
-                description="Sorry, this isn't a valid CTFtime event link or id.",
-                colour=discord.Colour.red(),
-            )
-            await ctx.respond(embed=embed, ephemeral=True)
+        # Check if link is valid (try and grab an ID from string)
+        event_id = regex.search('[0-9]+', ctftime_link)
+        if event_id is None:
+            # The link is not valid
+            await ctx.respond("This isn't a valid CTFtime event link or id.", ephemeral=True)
             return
-        # Search for the ID in link
-        event = regex.search("[0-9]+", ctftime_link)
-        event_id = event.group()
-        # ID is incorrect - got 404
+
+        # Link seems valid
+        event_id = event_id.group()
         event_info = await get_ctf_details(event_id)
         if event_info == 404:
-            embed = discord.Embed(
-                title="Error!",
-                description="Sorry, this isn't a valid CTFtime event link or id.",
-                colour=discord.Colour.red(),
-            )
-            await ctx.respond(embed=embed, ephemeral=True)
+            # ID is incorrect - got 404
+            await ctx.respond("This isn't a valid CTFtime event link or id.", ephemeral=True)
             return
-        # Format embed
-        embed = discord.Embed(title=event_info['title'], description=event_info['description'], colour=discord.Colour.blurple())
+
+        # ID is correct, formatting embed
+        embed = discord.Embed(
+                title=event_info['title'],
+                description=event_info['description'],
+                colour=discord.Colour.blurple()
+        )
         embed.set_thumbnail(url=event_info['logo'])
-        embed.add_field(name="Starts at", value=discord.utils.format_dt(event_info['start']))
-        embed.add_field(name="Ends at", value=discord.utils.format_dt(event_info['finish']))
-        embed.add_field(name="CTFtime", value=f"<https://ctftime.org/event/{event_id}>")
-        embed.set_footer(
-                text=f"{event_info['participants']} participants"
+        embed.add_field(
+                name='Starts at',
+                value=discord.utils.format_dt(event_info['start']),
+        )
+        embed.add_field(
+                name='Ends at',
+                value=discord.utils.format_dt(event_info['finish']),
+        )
+        embed.add_field(
+                name='CTFtime',
+                value=f'<https://ctftime.org/event/{event_id}>',
         )
         embed.url = event_info['url']
-        if discord_inv := regex.search(
-            "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
-            event_info['description'],
-        ):
-            # Discord invite link found
-            discord_inv = discord_inv.group()
+        if event_info['discord_inv'] is not None:
             embed.add_field(
-                name="Discord Server",
-                value=f"[Click here to join]({discord_inv})",
+                    name='Discord Server',
+                    value=f'[Click here to join!]({event_info["discord_inv"]})',
             )
         await ctx.respond(embed=embed)
 
 
-    @ctf.command(description="Sign up for an upcoming CTF, and register it to the bot.")
+    # --- /ctf signup ---
+    @ctf.command(description='Sign up for an upcoming CTF, and register it to the bot.')
     async def signup(self, ctx, ctftime_link: str=''):
+        # Get the user's team
+        team_id = await config.get_user_team(ctx.author, ctx.guild)
+        if team_id is None:
+            # User doesn't have a team
+            await ctx.respond('You need to be in a team to use this command.', ephemeral=True)
+            return
+
         if ctftime_link == '':
-            # Custom event creation
-            embed = discord.Embed(
-                    title='CTF title',
-                    description='CTF description',
-                    colour=discord.Colour.blurple()
-            )
-            embed.add_field(
-                    name='Starts at',
-                    value='CTF start time'
-            )
-            embed.add_field(
-                    name='Ends at',
-                    value='CTF end time'
-            )
-            embed.set_footer(
-                    text="What's this? No CTFtime ctftime_link was detected, so you are making a custom event now."
-            )
-            await ctx.respond(embed=embed, view=CustomEventView(self.bot))
+            # Send modal to create custom event
+            await ctx.send_modal(CustomEventModal(self.bot))
             return
-        # Check whether the ctftime_link is valid
-        p = regex.match(
-            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
-        )
-        if p is None and regex.match("[0-9]+", ctftime_link) is None:
-            # The ctftime_link is neither valid nor a possible CTFtime event ID
-            embed = discord.Embed(
-                title="Failed",
-                description="Sorry, this isn't a valid CTFtime event ctftime_link or id.",
-                colour=discord.Colour.red(),
-            )
-            await ctx.respond(embed=embed, ephemeral=True)
+
+        # Check whether the link is valid
+        event_id = regex.search('[0-9]+', ctftime_link)
+        if event_id is None:
+            # The link is not valid
+            await ctx.respond("This isn't a valid CTFtime event link or id.", ephemeral=True)
             return
-        # Try to grab the event ID from the ctftime_link
-        event = regex.search("[0-9]+", ctftime_link)
-        event_id = event.group()
+
+        # Link seems valid
+        event_id = event_id.group()
         event_info = await get_ctf_details(event_id)
-        # Check if CTF timing is valid
+        if event_info == 404:
+            # ID is incorrect - got 404
+            await ctx.respond("This isn't a valid CTFtime event link or id.", ephemeral=True)
+            return
+
+        # Check if timing is valid
         if datetime.datetime.now(datetime.timezone.utc) > event_info['finish']:
             # CTF has already ended
-            embed = discord.Embed(
-                    title='Failed',
-                    description='This CTF is already over.',
-                    colour=discord.Colour.red()
-            )
-            await ctx.respond(embed=embed, ephemeral=True)
+            await ctx.respond('This CTF is already over.', ephemeral=True)
             return
         elif datetime.datetime.now(datetime.timezone.utc) > event_info['start']:
-            # CTF has started, but start time cannot be in the past due to Discord event limitation
-            # Add 5 second buffer to allow for lag due to creating event etc
+            # Start time cannot be in the past 
+            # Add a 5 second buffer to account for lag
             event_info['start'] = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=5)
-        # Format embed
-        embed = discord.Embed(title=event_info['title'], description=event_info['description'])
-        embed.set_thumbnail(url=event_info['logo'])
-        embed.add_field(name="Starts at", value=discord.utils.format_dt(event_info['start']))
-        embed.add_field(name="Ends at", value=discord.utils.format_dt(event_info['finish']))
-        embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
-        embed.url = event_info['url']
-        if discord_inv := regex.search(
-            "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
-            event_info['description'],
-        ):
-            # Discord invite found
-            discord_inv = discord_inv.group()
-            embed.add_field(
-                name="Discord Server",
-                value=f"[Click here to join]({discord_inv})",
-            )
-        # There shouldn't be any exceptions from here on, so we don't need to worry abt ephemeral
-        # Deferring is necessary as the heavy db operations later on might cause the app to not respond in time (3s)
-        await ctx.defer()
-        # Add the ctf to the database
+
+        # ID is correct
+
         with config.Connect() as cnx:
             cursor = cnx.cursor()
+
             # Check if the user's team has registered this CTF already
             cursor.execute(
-                "SELECT t.id FROM ctf AS c " \
-                "INNER JOIN team_members AS m ON c.team = m.team " \
-                "INNER JOIN teams AS t ON m.team = t.id " \
-                "WHERE c.ctftime_id = %s AND t.guild = %s AND m.member = %s",
-                (event_id, ctx.guild.id, ctx.author.id)
-            ) 
-            if (team_id := cursor.fetchone()) is not None:
-                # CTF is already registered
-                embed.colour = discord.Colour.blurple()
-                embed.set_footer(
-                        text="You have already signed up for this event!"
-                )
-                # Update the relevant information in case it has changed
-                cursor.execute(
-                    "UPDATE ctf AS c " \
-                    "INNER JOIN team_members AS m ON c.team = m.team " \
-                    "INNER JOIN teams AS t ON m.team = t.id " \
-                    "SET c.description = %s, c.start = %s, c.finish = %s, c.discord = %s, c.participants = %s " \
-                    "WHERE m.member = %s AND t.guild = %s",
-                    (
-                        event_info['description'],
-                        int(time.mktime(event_info['start'].timetuple())),
-                        int(time.mktime(event_info['finish'].timetuple())),
-                        discord_inv,
-                        event_info['participants'],
-                        ctx.author.id,
-                        ctx.guild.id
-                    )
-                )
-                await ctx.respond(embed=embed)
-                return
-            # CTF not registered yet
-            embed.colour = discord.Colour.green()
-            embed.set_footer(
-                    text="Successfully signed up for this event!"
+                    'SELECT COUNT(1) FROM ctf '\
+                    'WHERE team = %s',
+                    (team_id,),
             )
-            # Fix description length if its too long for scheduled event
-            if len(event_info['description'] + f'...\nCTFtime:\nhttps://ctftime.org/event/{event_id}') >= 1000:
-                event_info['description'] = event_info['description'][:1000 - len(f'...\nCTFtime:\nhttps://ctftime.org/event/{event_id}')] + f'...\nCTFtime:\nhttps://ctftime.org/event/{event_id}'
+            if cursor.fetchone()[0] != 0:
+                # CTF is already registered
+                await ctx.respond('You have already signed up for this event!', ephemeral=True)
+                return
+
+            # Shouldn't have any issues now so we can defer
+            await ctx.defer()
+            # CTF not registered yet
             # Create scheduled event
             scheduled_event = await ctx.guild.create_scheduled_event(
                     name=event_info['title'],
@@ -229,242 +175,331 @@ class CTF(commands.Cog):
                     end_time=event_info['finish'],
                     location=event_info['url']
             )
-            # Create new text channel for the CTF
-            # Get list of members to update perms for channel
-            # Default perms to view_channel = False
+
+            # Create text channel for CTF
+            # Get role id of team
+            cursor.execute(
+                    'SELECT role FROM teams '\
+                    'WHERE id = %s',
+                    (team_id,)
+            )
+            role = cursor.fetchall()[0][0]
+            # Define perms
             perms = {
                     ctx.guild.default_role: \
                             discord.PermissionOverwrite(view_channel=False),
                     ctx.guild.me: \
-                            discord.PermissionOverwrite(view_channel=True)
-
+                            discord.PermissionOverwrite(view_channel=True),
+                    ctx.guild.get_role(role): \
+                            discord.PermissionOverwrite(view_channel=True),
             }
-            # Get user's team
-            cursor.execute(
-                    'SELECT t.id FROM team_members AS m '\
-                    'INNER JOIN teams AS t ON t.id = m.team '\
-                    'WHERE t.guild = %s AND m.member = %s',
-                    (ctx.guild.id, ctx.author.id)
-            )
-            if (team_id := cursor.fetchone()[0]) == None:
-                await ctx.respond("Sorry, you don't have a team yet, please make one via /team create", ephemeral=True)
-                return
-            # Get all members in team
-            cursor.execute(
-                    'SELECT member FROM team_members AS m '\
-                    'INNER JOIN teams AS t '\
-                    'ON t.id = m.team '\
-                    'WHERE t.guild = %s AND m.team = %s',
-                    (ctx.guild.id, team_id)
-            )
-            members = cursor.fetchall()
-            for member in members:
-                member_id = member[0]
-                perms[ctx.guild.get_member(member_id)] = \
-                        discord.PermissionOverwrite(view_channel=True)
+            
             # Check if CTF category exists
             cursor.execute(
-                    'SELECT t.ctf_category FROM teams AS t ' \
-                    'INNER JOIN team_members AS m ON t.id = m.team ' \
-                    'WHERE m.member = %s AND t.guild = %s',
-                    (ctx.author.id, ctx.guild.id)
+                    'SELECT ctf_category FROM teams '\
+                    'WHERE id = %s',
+                    (team_id,),
             )
-            if (ctf_category := cursor.fetchone()) is None \
-                    or ctx.guild.get_channel(ctf_category[0]) not in ctx.guild.categories:
+            if (ctf_category := ctx.guild.get_channel(cursor.fetchall()[0][0])) not in ctx.guild.categories:
                 # Category does not exist, create it first
-                ctf_category = await ctx.guild.create_category_channel('CTFs')          
+                ctf_category = await ctx.guild.create_category_channel('CTFs')
+                # Update category in db
                 cursor.execute(
-                        'UPDATE teams SET ctf_category = %s '\
+                        'UPDATE teams SET ctf_category = %s '
                         'WHERE id = %s',
-                        (ctf_category.id, team_id)
+                        (ctf_category.id, team_id),
                 )
-            else:
-                ctf_category = ctx.guild.get_channel(ctf_category[0])
-            # Create channel
+
+            # Actually create channel
             ctf_channel = await ctx.guild.create_text_channel(
                     event_info['title'],
-                    topic=f"https://ctftime.org/event/{event_id}",
+                    topic=event_info['url'],
                     overwrites=perms,
-                    category=ctf_category
-            ) 
-            # Add CTF into db
+                    category=ctf_category,
+            )
+
+            # Sync CTF to database
             cursor.execute(
-                    "INSERT INTO ctf (ctftime_id, title, description, start, " \
-                        "finish, discord, participants, url, logo, team, scheduled_event, channel, archived) " \
-                    "SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, t.id, %s, %s, 0 FROM teams AS t " \
-                    "INNER JOIN team_members AS m ON m.team = t.id " \
-                    "WHERE m.member = %s AND t.guild = %s ",
-                (
-                    event_id,
-                    event_info['title'],
-                    event_info['description'],
-                    int(time.mktime(event_info['start'].timetuple())),
-                    int(time.mktime(event_info['finish'].timetuple())),
-                    discord_inv,
-                    event_info['participants'],
-                    event_info['url'],
-                    event_info['logo'],
-                    scheduled_event.id,
-                    ctf_channel.id,
-                    ctx.author.id,
-                    ctx.guild.id
-                )
-            ) 
-            # Commit changes
+                    'INSERT INTO ctf (ctftime_id, title, description, start, '\
+                        'finish, discord, participants, url, logo, team, '\
+                        'scheduled_event, channel, archived) '\
+                    'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)',
+                    (
+                        event_id,
+                        event_info['title'],
+                        event_info['description'],
+                        int(time.mktime(event_info['start'].timetuple())),
+                        int(time.mktime(event_info['finish'].timetuple())),
+                        event_info['discord_inv'],
+                        event_info['participants'],
+                        event_info['url'],
+                        event_info['logo'],
+                        team_id,
+                        scheduled_event.id,
+                        ctf_channel.id,
+                    ),
+            )
             cnx.commit()
-        await ctx.respond(embed=embed)
-        await ctf_channel.send(embed=embed)
 
-
-    @ctf.command(description="Un-signup for a CTF, unregistering it from the bot.")
-    async def unsignup(self, ctx, ctftime_link: str):
-        # TODO: Delete custom events
-        # Check whether the link is valid
-        p = regex.match(
-            "((https://)|(http://))?(www.)?ctftime.org/event/[0-9]+(/)?", ctftime_link
+        # Format embed
+        embed = discord.Embed(
+                title=event_info['title'],
+                description=event_info['description'],
+                colour=discord.Colour.blurple(),
         )
-        if p is None and regex.match("[0-9]+", ctftime_link) is None:
-            # The link is neither valid nor a possible CTFtime event ID
-            await ctx.respond(f'{ctftime_link} is not a valid CTFtime event ID or link', ephemeral=True)
+        embed.set_thumbnail(url=event_info['logo'])
+        embed.add_field(
+                name='Starts at',
+                value=discord.utils.format_dt(event_info['start']),
+        )
+        embed.add_field(
+                name='Ends at',
+                value=discord.utils.format_dt(event_info['finish']),
+        )
+        embed.add_field(
+                name='CTFtime',
+                value=f'<https://ctftime.org/event/{event_id}>',
+        )
+        embed.url = event_info['url']
+        if event_info['discord_inv'] is not None:
+            embed.add_field(
+                    name='Discord Server',
+                    value=f'[Click here to join!]({event_info["discord_inv"]})',
+            )
+
+        # Send embeds
+        await ctx.respond(embed=embed)
+        msg = await ctf_channel.send(embed=embed)
+        await msg.pin()
+
+
+    # --- /ctf unsignup ---
+    @ctf.command(description="Unregister a CTF you've signed up for from the bot.")
+    async def unsignup(self, ctx, ctftime_link: str=''):
+        team = await config.get_user_team(ctx.author, ctx.guild)
+        if team == None:
+            # User doesn't have a team
+            await ctx.respond('You need to be in a team to use this command', ephemeral=True)
             return
-        # Try to grab the event ID from the link
-        event = regex.search("[0-9]+", ctftime_link)
-        event_id = event.group()
+
+        if ctftime_link == '':
+            # No link provided, try to guess CTF from the channel the command was invoked in
+            with config.Connect() as cnx:
+                cursor = cnx.cursor()
+                cursor.execute(
+                        'SELECT id FROM ctf '\
+                        'WHERE channel = %s',
+                        (ctx.channel.id,)
+                )
+                if (id := cursor.fetchone()) == None:
+                    await ctx.respond('CTF cannot be inferred from this context, try again in the CTF channel or with the CTFtime ID.', ephemeral=True)
+                    return
+
+                # Unregistering CTF
+                await ctx.defer()
+                id = id[0]
+
+                # Get CTF details from db
+                ctf = cnx.cursor(dictionary=True)
+                ctf.execute(
+                        'SELECT id, ctftime_id, title, description, start, finish, '\
+                        'discord, participants, team, scheduled_event, '\
+                        'url, logo, channel, archived FROM ctf '\
+                        'WHERE id = %s',
+                        (id,),
+                )
+                ctf = ctf.fetchone()
+                # Delete scheduled event
+                scheduled_event = ctx.guild.get_scheduled_event(ctf['scheduled_event'])
+                try:
+                    await scheduled_event.delete()
+                except:
+                    pass
+
+                # Delete CTF channel
+                await ctx.channel.delete()
+
+                # Delete CTF from db
+                cursor.execute(
+                        'DELETE FROM ctf WHERE id = %s',
+                        (id,),
+                )
+                cnx.commit()
+                return
+        # Check whether the link is valid
+        event_id = regex.search('[0-9]+', ctftime_link)
+        if event_id is None:
+            # Invalid link
+            await ctx.respond("This isn't a valid CTFtime event ID or link.", ephemeral=True)
+            return
+
+        # Link seems valid
+        event_id = event_id.group()
+
+        team_id = await config.get_user_team(ctx.author, ctx.guild)
+        if team_id is None:
+            await ctx.respond("You need to be in a team to use this command.", ephemeral=True)
+            return
+
         with config.Connect() as cnx:
             cursor = cnx.cursor()
-            # Check if the team has registered this CTF
+            # Check if team has registered this CTF
             ctf = cnx.cursor(dictionary=True)
             ctf.execute(
-                    'SELECT c.id, c.title, c.description, c.start, c.finish, c.discord, c.participants, c.team, c.scheduled_event, c.url, c.logo, c.channel, c.archived FROM ctf AS c ' \
-                    'INNER JOIN teams AS t ON c.team = t.id ' \
-                    'INNER JOIN team_members AS m ON t.id = m.team ' \
-                    'WHERE c.ctftime_id = %s AND t.guild = %s AND m.member = %s',
-                    (event_id, ctx.guild.id, ctx.author.id)
+                    'SELECT id, ctftime_id, title, description, start, finish, '\
+                    'discord, participants, team, scheduled_event, '\
+                    'url, logo, channel, archived FROM ctf '\
+                    'WHERE team = %s AND ctftime_id = %s ',
+                    (team_id, event_id),
             )
-            # FIXME: Might want to add an exception for multiple CTFs, so the command doesn't break down if somehow 2 identical CTFs slip through
             if (ctf := ctf.fetchone()) is None:
                 # Team didn't sign up for this CTF
-                await ctx.respond("Sorry, you haven't signed up for this CTF", ephemeral=True)
+                await ctx.respond("You haven't signed up for this CTF.", ephemeral=True)
                 return
-            # Safe to defer now
-            await ctx.defer()
+
             # Team signed up for this CTF
-            title = ctf['title']
-            desc = ctf['description']
-            participants = ctf['participants']
-            start = datetime.datetime.fromtimestamp(ctf['start'])
-            finish = datetime.datetime.fromtimestamp(ctf['finish'])
-            url = ctf['url']
-            logo_url = ctf['logo']
-            # Format embed
-            embed = discord.Embed(title=title, description=desc, colour=discord.Colour.green())
-            embed.set_thumbnail(url=logo_url)
-            embed.add_field(name="Starts at", value=discord.utils.format_dt(start))
-            embed.add_field(name="Ends at", value=discord.utils.format_dt(finish))
-            embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
-            embed.url = url
-            if discord_inv := regex.search(
-                "((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?",
-                desc
-            ):
-                # Discord invite found
-                discord_inv = discord_inv.group()
-                embed.add_field(
-                    name="Discord Server",
-                    value=f"[Click here to join]({discord_inv})"
-                )
+            # We can defer now
+            await ctx.defer()
+
             # Delete scheduled event
-            cursor.execute(
-                    'SELECT scheduled_event FROM ctf ' \
-                    'WHERE id = %s', 
-                    (ctf['id'],)
-            )
-            scheduled_event = ctx.guild.get_scheduled_event(cursor.fetchone()[0])
+            scheduled_event = ctx.guild.get_scheduled_event(ctf['scheduled_event'])
             try:
                 await scheduled_event.delete()
             except:
                 pass
+
             # Delete CTF channel
             channel = ctx.guild.get_channel(ctf['channel'])
             try:
                 await channel.delete()
-            except:
+            except discord.NotFound:
                 pass
+
             # Delete CTF from db
             cursor.execute(
                     'DELETE FROM ctf WHERE id = %s',
                     (ctf['id'],)
             )
-            embed.set_footer(
-                    text="The event has been successfully unregistered."
-            )
+            
+            # Format embed
+            embed = discord.Embed(title=ctf['title'], description=ctf['description'], colour=discord.Colour.green())
+            embed.set_thumbnail(url=ctf['logo'])
+            embed.add_field(name="Starts at", value=discord.utils.format_dt(ctf['start']))
+            embed.add_field(name="Ends at", value=discord.utils.format_dt(ctf['finish']))
+            embed.add_field(name="CTFtime", value=f"https://ctftime.org/event/{event_id}")
+            embed.url = ctf['url']
+
             cnx.commit()
             await ctx.respond(embed=embed)
-    
 
+
+    # --- task loop to check for CTFs ---
     @tasks.loop(seconds=10.0)
     async def check_ctf(self):
         with config.Connect() as cnx:
-            ctfs = cnx.cursor(dictionary=True)
             cursor = cnx.cursor()
-            # Get all unarchived CTFs and the time which they start
+            ctfs = cnx.cursor(dictionary=True)
+
+            # Get all unarchived CTFs
             ctfs.execute('SELECT * FROM ctf WHERE archived = 0')
             ctfs = ctfs.fetchall()
             for ctf in ctfs:
-                channel = self.bot.get_channel(ctf['channel'])
-                if channel == None:
-                    # Channel can't be found, we can treat this CTF as archived as we can't send any reminders
-                    cursor.execute('UPDATE ctf SET archived = 1 WHERE id = %s', (ctf['id'],))
-                    cnx.commit()
-                    continue
-                if datetime.datetime.fromtimestamp(ctf['start']) <= datetime.datetime.now() and ctf['reminded'] != 2:
+                if (channel := self.bot.get_channel(ctf['channel'])) is None:
+                    # Channel not found, treat this CTF as archived
+                    cursor.execute(
+                            'UPDATE ctf SET archived = 1 '\
+                            'WHERE id = %s',
+                            (ctf['id'],),
+                    )
+                elif datetime.datetime.fromtimestamp(ctf['start']) <= datetime.datetime.now() and ctf['reminded'] != 2:
                     # CTF has started
                     cursor.execute(
-                            'UPDATE ctf SET reminded = 2'\
+                            'UPDATE ctf SET reminded = 2 '\
                             'WHERE id = %s',
-                            (ctf['id'],)
+                            (ctf['id'],),
                     )
+
+                    # Send reminder
                     # TODO: add option to turn off @everyone
                     embed = discord.Embed(
                             title=ctf['title'],
-                            description='@everyone This CTF has started!',
-                            colour=discord.Colour.blurple()
+                            description=ctf['description'],
+                            colour=discord.Colour.blurple(),
                     )
-                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1 and ctf['reminded'] != 1:
-                    # CTF will start in a day's time
+                    embed.set_thumbnail(url=ctf['logo'])
+                    embed.add_field(
+                            name='Starts at',
+                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['start'])),
+                    )
+                    embed.add_field(
+                            name='Ends at',
+                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['finish'])),
+                    )
+                    embed.url = ctf['url']
+                    await channel.send('@everyone The CTF is starting!', embed=embed)
+                    cnx.commit()
+                    return
+                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1 \
+                        and ctf['reminded'] != 1:
+                    # The CTF will start in 1 day
                     cursor.execute(
                             'UPDATE ctf SET reminded = 1 '\
                             'WHERE id = %s',
-                            (ctf['id'],)
+                            (ctf['id'],),
                     )
+                    # Send reminder
+                    # TODO: add option to turn off @everyone
                     embed = discord.Embed(
                             title=ctf['title'],
-                            description='The CTF will start in 1 day!',
-                            colour=discord.Colour.blurple()
+                            description=ctf['description'],
+                            colour=discord.Colour.blurple(),
                     )
-                elif datetime.datetime.now() > datetime.datetime.fromtimestamp(ctf['finish']): 
-                    # CTF is over, archive it
-                    guild = channel.guild
+                    embed.set_thumbnail(url=ctf['logo']) if ctf['logo'] != None else None
+                    embed.add_field(
+                            name='Starts at',
+                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['start'])),
+                    )
+                    embed.add_field(
+                            name='Ends at',
+                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['finish'])),
+                    )
+                    embed.url = ctf['url']
+                    await channel.send('@everyone The CTF will start in 1 day!', embed=embed)
+                    cnx.commit()
+                    return
+                elif datetime.datetime.now() > datetime.datetime.fromtimestamp(ctf['finish']):
+                    # CTF is over
+                    cursor.execute(
+                            'UPDATE ctf SET archived = 1 '\
+                            'WHERE id = %s AND team = %s',
+                            (ctf['id'], ctf['team']),
+                    )
+
+                    # Get category to archive to
                     cursor.execute(
                             'SELECT archived_category FROM teams '\
                             'WHERE id = %s',
-                            (ctf['team'],)
+                            (ctf['team'],),
                     )
-                    archived = cursor.fetchone()[0]
-                    if (archived := self.bot.get_channel(archived)) == None:
-                        archived = await guild.create_category_channel('Archived')
+
+                    if (archived := self.bot.get_channel(cursor.fetchall()[0][0])) is None:
+                        # Archived channel not found, create new
+                        # Get guild of channel
+                        archived = await channel.guild.create_category_channel('Archived')
                         cursor.execute(
                                 'UPDATE teams SET archived_category = %s '\
-                                'WHERE id = %s', 
-                                (archived.id, ctf['team'])
+                                'WHERE id = %s',
+                                (archived.id, ctf['team']),
                         )
-                    archived = self.bot.get_channel(archived)
+
+                    # Place text channel in archived category
                     await channel.edit(category=archived)
+
                     # Get all members in team and their scores
                     cursor.execute(
                             'SELECT solver, points FROM challenges '\
-                            'WHERE team = %s AND ctf = %s',
-                            (ctf['team'], ctf['id'])
+                            'WHERE team = %s AND ctf = %s AND solved = 1',
+                            (ctf['team'], ctf['id']),
                     )
                     challenges = cursor.fetchall()
                     members = {}
@@ -476,238 +511,186 @@ class CTF(commands.Cog):
                             members[c[0]] += c[1]
                         total += c[1]
                     members = '\n'.join([f'<@{m}>: {members[m]} points ({round(members[m] / total * 100, 1)}%)' for m in members])
+
                     embed = discord.Embed(
                             title=ctf['title'],
-                            description='@everyone The CTF has ended! Below are the percentage points of each team member:\n' + members,
-                            colour=discord.Colour.green()
-                            )
-                    cursor.execute('UPDATE ctf SET archived = 1 WHERE id = %s AND team = %s', (ctf['id'], ctf['team']))
-                await channel.send(embed=embed)
-                cnx.commit()
-
-class CustomEvent(discord.ui.Select):
-    def __init__(self, bot):
-        options = [
-                discord.SelectOption(
-                    label="CTF Name",
-                    description="Edit the CTF's name",
-                    value="title"
-                ),
-                discord.SelectOption(
-                    label='CTF Platform Link',
-                    description='Edit the CTF platform link',
-                    value='link'
-                ),
-                discord.SelectOption(
-                    label="CTF Description",
-                    description="Edit the CTF's description",
-                    value="desc"
-                ),
-                discord.SelectOption(
-                    label="CTF Duration",
-                    description="Edit the duration of the CTF",
-                    value="start_end"
-                ),
-                discord.SelectOption(
-                    label="Discord Invite",
-                    description="Add a Discord Server invite, if there is one",
-                    value="discord_inv"
-                ),
-                discord.SelectOption(
-                    label="Done",
-                    description="Done editing the challenge?",
-                    emoji='✅',
-                    value="done"
-                ),
-                discord.SelectOption(
-                    label="Cancel",
-                    description="Discard changes",
-                    emoji='❌',
-                    value="cancel"
-                )
-        ]
-        self.bot = bot
-        # In case it isn't initialized at point of saving
-        self.discord_inv = None
-        super().__init__(
-                placeholder="Choose what to edit...",
-                min_values=1,
-                max_values=1,
-                options=options
-        )
-    async def callback(self, interaction: discord.Interaction):
-        # Check for wait_for(message)
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        # Get value of option
-        option = self.values[0]
-        if option == "title":
-            await interaction.response.send_message(content="Please send the CTF's title in chat now.")
-            try:
-                title = await self.bot.wait_for('message', check=check, timeout=60.0)
-            except:
-                await interaction.edit_original_message(content="Timeout", delete_after=5.0)
-                return
-            else:
-                await interaction.delete_original_message()
-                embed = interaction.message.embeds[0]
-                embed.title = discord.utils.escape_markdown(title.clean_content)
-                await interaction.message.edit(embed=embed)
-                self.title = embed.title
-                return
-        elif option == 'link':
-            await interaction.response.send_message(content="Please send the CTF platform link in chat now.")
-            try:
-                link = await self.bot.wait_for('message', check=check, timeout=60.0)
-            except:
-                await interaction.edit_original_message(content="Timeout", delete_after=5.0)
-                return
-            else:
-                embed = interaction.message.embeds[0]
-                link = discord.utils.escape_markdown(link.clean_content)
-                if regex.match('((?:https)|(?:http))?://.+\..+', link):
-                    embed.url = link
-                else:
-                    await interaction.edit_original_message(content="Sorry, that doesn't seem to be a valid URL.", delete_after=5.0)
-                    return
-                await interaction.delete_original_message()
-                await interaction.message.edit(embed=embed)
-                self.url = embed.url
-                return
-        elif option == 'desc':
-            await interaction.response.send_message(content='Please send a short description of the CTF in chat now.')
-            try:
-                desc = await self.bot.wait_for('message', check=check, timeout=60.0)
-            except:
-                await interaction.edit_original_message(content="Timeout", delete_after=5.0)
-                return
-            else:
-                await interaction.delete_original_message()
-                embed = interaction.message.embeds[0]
-                desc = desc.clean_content
-                embed.description = desc
-                self.desc = embed.description
-                await interaction.message.edit(embed=embed)
-        elif option == 'start_end':
-            await interaction.response.send_message(content='Please send the duration of the CTF (GMT) in the following format: DD/MM/YY HH:MM to DD/MM/YY HH:MM')
-            try:
-                duration = await self.bot.wait_for('message', check=check, timeout=60.0)
-            except:
-                await interaction.edit_original_message(content="Timeout", delete_after=5.0)
-                return
-            else:
-                await interaction.delete_original_message()
-                embed = interaction.message.embeds[0]
-                duration = duration.content.split(' to ')
-                start, finish = datetime.datetime.strptime(duration[0], '%d/%m/%y %H:%M'), datetime.datetime.strptime(duration[1], '%d/%m/%y %H:%M')
-
-                if datetime.datetime.now() >= start or datetime.datetime.now() >= finish:
-                    await interaction.edit_original_message('The time specified is invalid.', delete_after=5.0)
-                    return
-                else:
-                    self.start, self.finish = start, finish
-                    start, finish = discord.utils.format_dt(start), discord.utils.format_dt(finish)
-                embed.set_field_at(0, name='Starts at', value=start)
-                embed.set_field_at(1, name='Starts at', value=finish)
-                await interaction.message.edit(embed=embed)
-        elif option == 'discord_inv':
-            await interaction.response.send_message(content='Please send the Discord invite link to the CTF discord.')
-            try:
-                discord_inv = await self.bot.wait_for('message', check=check, timeout=60.0)
-            except:
-                duration = await interaction.edit_original_message(content="Timeout", delete_after=5.0)
-                return
-            else:
-                discord_inv = discord_inv.content
-                if p := regex.match('((https)?|(https)?)://(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?', discord_inv):
-                    for i in embed.fields:
-                        if i.name == 'Discord Server':
-                            index = embed.fields.index(i)
-                            embed.set_field_at(index, name='Discord Server', value=discord_inv)
-                            break
-                        else:
-                            embed.add_field(name='Discord Server', value=discord_inv)
-                    self.discord_inv = discord_inv
-                else:
-                    await interaction.response.edit_original_message(content="That doesn't seem like a valid Discord invite!", delete_after=5.0)
-        elif option == 'done':
-            with config.Connect() as cnx:
-                cursor = cnx.cursor()
-                cursor.execute('SELECT t.ctf_category, t.id FROM teams AS t '\
-                        'INNER JOIN team_members AS m '\
-                        'ON t.id = m.team '\
-                        'WHERE t.guild = %s AND m.member = %s',
-                        (interaction.guild.id, interaction.user.id)
-                        )
-                team = cursor.fetchone()
-                category = self.bot.get_channel(team[0])
-                cursor.execute(
-                        'SELECT member FROM team_members WHERE team = %s',
-                        (team[1],)
-                )
-                members = cursor.fetchall()
-                perms = {
-                        interaction.guild.default_role: \
-                                discord.PermissionOverwrite(view_channel=False),
-                        interaction.guild.me: \
-                                discord.PermissionOverwrite(view_channel=True)
-
-                }
-                for member in members:
-                    member_id = member[0]
-                    perms[interaction.guild.get_member(member_id)] = \
-                            discord.PermissionOverwrite(view_channel=True)
-                # Check if CTF category exists
-                cursor.execute(
-                        'SELECT ctf_category FROM teams ' \
-                        'WHERE id = %s',
-                        (team[1],)
-                )
-                if (ctf_category := cursor.fetchone()) is None \
-                        or interaction.guild.get_channel(ctf_category[0]) not in interaction.guild.categories:
-                    # Category does not exist, create it first
-                    ctf_category = await interaction.guild.create_category_channel('CTFs')          
-                    cursor.execute(
-                            'UPDATE teams SET ctf_category = %s '\
-                            'WHERE id = %s',
-                            (ctf_category.id, team[1])
+                            description='Point distribution:\n' + members,
+                            colour=discord.Colour.green(),
                     )
-                else:
-                    ctf_category = interaction.guild.get_channel(ctf_category[0])
-                # Create channel
-                ctf_channel = await interaction.guild.create_text_channel(
-                        self.title,
-                        overwrites=perms,
-                        category=ctf_category
-                ) 
-                # Schedule event
-                scheduled_event = await interaction.guild.create_scheduled_event(
-                        name=self.title,
-                        description=self.desc,
-                        start_time=self.start,
-                        end_time=self.finish,
-                        location=self.url
-                )
-                # Save CTF in db
-                cursor.execute('INSERT INTO ctf (title, description, start, finish, '\
-                        'discord, team, scheduled_event, channel, archived) '\
-                        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 0)',
-                        (self.title, self.desc, self.start, self.finish, self.discord_inv, team[1], scheduled_event.id, ctf_channel.id))
-                cnx.commit()
-                await interaction.response.send_message('The CTF has been saved!', ephemeral=True)
-        elif option == 'cancel':
-            await interaction.response.send_message('Deleting challenge...', delete_after=5.0, ephemeral=True)
-            await interaction.message.delete()
 
-        else:
-            await interaction.response.send_message(content='Sorry, not implemented yet', ephemeral=True)
+                    # Send info
+                    cnx.commit()
+                    await channel.send('@everyone The CTF has ended!', embed=embed)
+                    return
+
+
+# --- view for custom event menu ---
+class CustomEventModal(discord.ui.Modal):
+    def __init__(self, bot):
+        self.bot = bot
+        super().__init__(title="Custom CTF Event Creation")
+        # Input for CTF name
+        self.add_item(
+            discord.ui.InputText(
+                label="CTF Name",
+                placeholder="Foo CTF",
+                style=discord.InputTextStyle.short,
+            )
+        )
+
+        # Input for CTF description
+        self.add_item(
+            discord.ui.InputText(
+                label="CTF Description",
+                placeholder="Lorem ipsum...",
+                style=discord.InputTextStyle.long,
+                max_length=1000
+            )
+        )
+
+        # Input for CTF start and end time
+        self.add_item(
+            discord.ui.InputText(
+                label="CTF Duration",
+                placeholder="1 Jan 10:00 to 2 Jan 10:00 (timezone in GMT+8)",
+                style=discord.InputTextStyle.short,
+            )
+        )
+
+        # Input for CTF link
+        self.add_item(
+            discord.ui.InputText(
+                label="CTF Link",
+                placeholder="https://ctf.foo.com",
+                style=discord.InputTextStyle.short,
+            )
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        # Extract data from form
+        title = self.children[0].value
+        description = self.children[1].value
+        duration = self.children[2].value
+        duration = duration.replace('+', '-')
+        duration = duration.replace('-', '+')
+        link = self.children[3].value
+        logo = interaction.user.display_avatar.url
+        try:
+            duration = duration.split(' to ')
+            start = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp(), datetime.timezone.utc)
+            finish = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp(), datetime.timezone.utc)
+        except Exception as e:
+            # Couldn't parse time
+            print(e)
+            await interaction.response.send_message('Invalid time specified', ephemeral=True)
+            return
+        try:
+            if start >= finish:
+                # Start is after finish
+                await interaction.response.send_message('The start time can\'t be after the end time!', ephemeral=True)
+                return
+            elif datetime.datetime.now(datetime.timezone.utc) >= start or datetime.datetime.now(datetime.timezone.utc) >= finish:
+                # Start time or end time before current time
+                await interaction.response.send_message('The CTF has already started/is already over.', ephemeral=True)
+                return
+        except Exception as e:
+            print(e)
+            # Couldn't parse time
+            await interaction.response.send_message('Invalid time specified', ephemeral=True)
             return
 
-class CustomEventView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__()
-        self.add_item(CustomEvent(bot))
+        # Format embed
+        embed = discord.Embed(
+                title=title,
+                description=description,
+                colour=discord.Colour.blurple()
+        )
+        embed.url = link
+        embed.add_field(
+                inline=True,
+                name="Starts at",
+                value=discord.utils.format_dt(start),
+        )
+        embed.add_field(
+                inline=True,
+                name="Ends at",
+                value=discord.utils.format_dt(finish),
+        )
+        embed.set_thumbnail(url=logo)
 
+        with config.Connect() as cnx:
+            cursor = cnx.cursor()
+            team_id = await config.get_user_team(interaction.user, interaction.guild)
+
+            # Create ctf channel
+            cursor.execute(
+                    'SELECT ctf_category, role FROM teams '\
+                    'WHERE id = %s',
+                    (team_id,),
+            )
+            data = cursor.fetchone()
+            role = interaction.user.get_role(data[1])
+            ctf_category = data[0]
+            perms = {
+                    interaction.guild.default_role: \
+                            discord.PermissionOverwrite(view_channel=False),
+                    interaction.guild.me: \
+                            discord.PermissionOverwrite(view_channel=True),
+                    role: \
+                            discord.PermissionOverwrite(view_channel=True),
+            }
+            if ctf_category is None or self.bot.get_channel(ctf_category) is None:
+                # CTF category does not exist
+                ctf_category = await interaction.guild.create_category_channel('CTFs')
+                cursor.execute(
+                        'UPDATE teams SET ctf_category = %s '\
+                        'WHERE id = %s',
+                        (ctf_category.id, team_id)
+                )
+            else:
+                ctf_category = interaction.guild.get_channel(ctf_category)
+
+            ctf_channel = await interaction.guild.create_text_channel(
+                    title,
+                    overwrites=perms,
+                    topic=link,
+                    category=ctf_category,
+            )
+            # Send embed into text channel
+            # TODO: Pin embed to channel
+            await ctf_channel.send(embed=embed)
+
+            # Schedule event
+            scheduled_event = await interaction.guild.create_scheduled_event(
+                    name=title,
+                    description=description,
+                    start_time=start,
+                    end_time=finish,
+                    location=link,
+            )
+
+            # Save CTF in db
+            cursor.execute(
+                    'INSERT INTO ctf (title, description, start, finish, '\
+                    'url, logo, team, scheduled_event, channel, archived) '\
+                    'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0)',
+                    (
+                        title,
+                        description,
+                        start.timestamp(),
+                        finish.timestamp(),
+                        link,
+                        logo,
+                        team_id,
+                        scheduled_event.id,
+                        ctf_channel.id,
+                    )
+            )
+            cnx.commit()
+            await interaction.response.send_message(embed=embed)
+
+
+
+# --- load cog ---
 def setup(bot):
     bot.add_cog(CTF(bot))

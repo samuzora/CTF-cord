@@ -13,41 +13,16 @@ import mysql.connector
 import config
 
 token = os.environ.get("CTFCORD_BOT_TOKEN")
-default_prefix = ";"
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
 intents.members = True
 
-# Get prefix for current guild
-async def get_prefix(bot, message):
-    if message.guild:
-        with mysql.connector.connect(
-            host=config.MYSQL_DB,
-            port=3306,
-            username="root",
-            database="ctfcord",
-            password=config.MYSQL_PW,
-        ) as cnx:
-            cursor = cnx.cursor()
-            cursor.execute(
-                "SELECT prefix FROM guilds WHERE id = %s", (message.guild.id,)
-            )
-            config.prefix = cursor.fetchone()
-            if config.prefix is None:
-                config.prefix = default_prefix
-            else:
-                config.prefix = config.prefix[0]
-    else:
-        config.prefix = default_prefix
-    return config.prefix
-
 
 # config
 bot = commands.Bot(
-    command_prefix=get_prefix,
     case_insensitive=True,
     description="CTF-cord - the one-stop bot for CTF management!",
-    intents=intents
+    intents=intents,
 )
 
 
@@ -56,54 +31,42 @@ async def on_ready():
     await bot.user.edit(username='CTF-cord')
     print("Bot is ready.")
 
+@bot.slash_command(description="Help command")
+async def help(ctx):
+    # Command list 
+    # TODO: Change to dynamic (get info from cogs)
+    command_list = \
+    """`/ctf details <ctftime_link>` : View details about a CTF on CTFtime
+    `/ctf signup <ctftime_link:optional>` : Register for a CTF and let the bot handle the rest. If ctftime_link not provided, a custom CTF event can be created.
+    `/ctf unsignup <ctftime_link:optional>` : Un-register for a CTF. If ctftime_link not provided, the bot will try to infer the CTF if the command is invoked in the CTF channel. This is also the only way to delete custom CTFs.
+    
+    `/chall solved <chall_name> <chall_points:optional>` : Mark a challenge as solved and optionally specify the points the challenge is worth. 
+    `/chall solving <chall_category> <chall_name>` : Create a thread for the challenge.
+
+    `/team create <team_name>` : Create a team and assign a role to the team. To add others to your team, give them the same role. For now, you can only have 1 team per Discord Server.
+    `/team delete` : Delete the team you are currently in. 
+    """
+
+    # Format embed
+    embed = discord.Embed(
+            title="CTF-cord",
+            description=command_list,
+            colour=discord.Colour.blurple(),
+    )
+    embed.url = "https://github.com/samuzora/CTF-cord"
+    await ctx.respond(embed=embed)
 
 # Error handler
 @bot.event
-async def on_command_error(ctx, e):
-    if isinstance(e, commands.errors.PrivateMessageOnly):
-        embed = discord.Embed(
-            title="Usage error",
-            description="This command can only be used in a DMChannel.",
-            colour=discord.Colour.red(),
-        )
-    elif isinstance(e, commands.errors.MissingRequiredArgument):
-        embed = discord.Embed(
-            title="Missing arguments",
-            description=f"You are missing some arguments, please use {config.prefix}help <command> to view the syntax.",
-            colour=discord.Colour.red(),
-        )
-    elif isinstance(e, commands.errors.NoPrivateMessage):
-        embed = discord.Embed(
-            title="Usage error",
-            description="This command can only be used in a guild.",
-            colour=discord.Colour.red(),
-        )
-    elif isinstance(e, commands.errors.CheckFailure):
-        embed = discord.Embed(
-            title="Insufficient permissions!",
-            description=f"Sorry, you don't have the proper administrative rights to run this command. This could be because you are not an admin and are trying to use an admin command, or you haven't bound your account to the bot yet. To do so, check `{config.prefix}help bind`.",
-            colour=discord.Colour.red(),
-        )
-    elif isinstance(e, mysql.connector.Error):
-        embed = discord.Embed(
-            title="SQL Exception",
-            description="Sorry, an SQL exception occured.",
-            colour=discord.Colour.red(),
-        )
-    elif isinstance(e, commands.CommandNotFound):
-        return
+async def on_application_command_error(ctx, e):
+    if isinstance(e, mysql.connector.Error):
+        message = f"Sorry, a MySQL exception occured. Please try again."
     else:
-        embed = discord.Embed(
-            title="Error!",
-            description="Sorry, something went wrong. Please contact an admin for assistance.",
-            colour=discord.Colour.red(),
-        )
-        print(
-            f'ERROR!\n----------\n{ctx.author.id} aka {ctx.author.name} at {time.strftime("%H%M")}:\n{ctx.message.content}\n'
-        )
+        message = f"Sorry, something went wrong. Please contact {(await bot.application_info()).owner.mention} for assistance."
+        print(f'ERROR!\n----------\n{ctx.author.id} aka {ctx.author.name} at {time.strftime("%H%M")}:\n{(await ctx.interaction.original_message()).content}\n')
         traceback.print_exception(type(e), e, e.__traceback__)
         print("----------")
-    await ctx.send(embed=embed)
+    await ctx.respond(message, ephemeral=True)
 
 
 if __name__ == "__main__":
