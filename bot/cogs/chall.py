@@ -95,10 +95,6 @@ class Challenges(commands.Cog):
                         ephemeral=True,
                 )
                 return
-            elif datetime.datetime.now() < datetime.datetime.fromtimestamp(ctf[1]) or datetime.datetime.now() > datetime.datetime.fromtimestamp(ctf[2]):
-                # CTF timing not valid
-                await ctx.respond('This CTF has already ended/not started yet', ephemeral=True)
-                return
 
         # Format embed
         embed = discord.Embed(

@@ -87,11 +87,8 @@ class Teams(commands.Cog):
     async def delete(self, ctx):
         team = await config.get_user_team(ctx.author, ctx.guild)
         if team == None:
-            embed = discord.Embed(
-                    title="Error",
-                    description="You are not currently in a team.",
-                    colour=discord.Colour.red(),
-            )
+            await ctx.respond("You are not currently in a team.", ephemeral=True)
+            return
 
         with config.Connect() as cnx:
             cursor = cnx.cursor()
@@ -118,6 +115,37 @@ class Teams(commands.Cog):
                     )
         await ctx.respond(embed=embed)
     
+
+    # --- /team members --- 
+    # TODO: Check if role has been deleted
+    @team_group.command(description="List all members in your team.")
+    async def members(self, ctx):
+        team = await config.get_user_team(ctx.author, ctx.guild)
+        if team == None:
+            await ctx.respond("You are not currently in a team.", ephemeral=True)
+            return
+
+        # Get all members in a role
+        with config.Connect() as cnx:
+            cursor = cnx.cursor()
+            # Get role id
+            cursor.execute(
+                    'SELECT role FROM teams WHERE id = %s', 
+                    (team,),
+            )
+            role = cursor.fetchone()[0]
+            # Get role
+            role = await ctx.guild.get_role(role)
+            # Members in role
+            members = role.members
+
+            # Format embed
+            embed = discord.Embed(
+                    title="Team members",
+                    description="\n".join([member.mention for member in members]),
+                    colour=discord.Colour.blurple(),
+            )
+            await ctx.respond(embed=embed)
 
 def setup(bot):
     bot.add_cog(Teams(bot))

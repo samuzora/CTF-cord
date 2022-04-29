@@ -71,12 +71,10 @@ DROP TABLE IF EXISTS `teams`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `teams` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `title` varchar(50) NOT NULL,
+  `name` varchar(50) NOT NULL,
   `role` bigint NOT NULL,
-  `members` int DEFAULT NULL,
-  `guild` bigint DEFAULT NULL,
-  `ctf_category` bigint DEFAULT NULL,
-  `archived_category` bigint DEFAULT NULL,
+  `guild` bigint NOT NULL,
+  `channel` bigint NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
