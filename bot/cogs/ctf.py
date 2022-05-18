@@ -75,8 +75,8 @@ class CustomEventModal(discord.ui.Modal):
         event_info["logo"] = interaction.user.display_avatar.url
         try:
             duration = duration.split(' to ')
-            event_info["start"] = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp(), datetime.timezone.utc)
-            event_info["finish"] = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp(), datetime.timezone.utc)
+            event_info["start"] = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp())
+            event_info["finish"] = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp())
         except Exception as e:
             # Couldn't parse time
             await interaction.response.send_message('Invalid time specified', ephemeral=True)
