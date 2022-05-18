@@ -81,18 +81,13 @@ class CustomEventModal(discord.ui.Modal):
             # Couldn't parse time
             await interaction.response.send_message('Invalid time specified', ephemeral=True)
             return
-        try:
-            if event_info["start"] >= event_info["finish"]:
-                # Start is after finish
-                await interaction.response.send_message('The start time can\'t be after the end time!', ephemeral=True)
-                return
-            elif datetime.datetime.now(datetime.timezone.utc) >= event_info["start"] or datetime.datetime.now(datetime.timezone.utc) >= event_info["finish"]:
-                # Start time or end time before current time
-                await interaction.response.send_message('The CTF has already started/is already over.', ephemeral=True)
-                return
-        except Exception as e:
-            # Couldn't parse time
-            await interaction.response.send_message('Invalid time specified', ephemeral=True)
+        if event_info["start"] >= event_info["finish"]:
+            # Start is after finish
+            await interaction.response.send_message('The start time can\'t be after the end time!', ephemeral=True)
+            return
+        elif datetime.datetime.now() >= event_info["start"] or datetime.datetime.now() >= event_info["finish"]:
+            # Start time or end time before current time
+            await interaction.response.send_message('The CTF has already started/is already over.', ephemeral=True)
             return
 
         # Format embed
