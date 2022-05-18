@@ -73,16 +73,14 @@ class CustomEventModal(discord.ui.Modal):
         duration = duration.replace('-', '+')
         event_info["url"] = self.children[3].value
         event_info["logo"] = interaction.user.display_avatar.url
-        # try:
-        duration = duration.split(' to ')
-        event_info["start"] = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp(), datetime.timezone.utc)
-        event_info["finish"] = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp(), datetime.timezone.utc)
-        """
+        try:
+            duration = duration.split(' to ')
+            event_info["start"] = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp(), datetime.timezone.utc)
+            event_info["finish"] = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp(), datetime.timezone.utc)
         except Exception as e:
             # Couldn't parse time
             await interaction.response.send_message('Invalid time specified', ephemeral=True)
             return
-        """
         try:
             if event_info["start"] >= event_info["finish"]:
                 # Start is after finish
@@ -96,22 +94,6 @@ class CustomEventModal(discord.ui.Modal):
             # Couldn't parse time
             await interaction.response.send_message('Invalid time specified', ephemeral=True)
             return
-
-        # Create team
-        role = await create_team(self.ctx, self.team_name, self.users)
-
-        # Create ctf channel
-        channel, team_id = await create_ctf_channel(self.ctx, role, event_info)
-
-        # Schedule event
-        scheduled_event = await interaction.guild.create_scheduled_event(
-                name=event_info["title"],
-                description=event_info["description"],
-                start_time=event_info["start"],
-                end_time=event_info["finish"],
-                location=event_info["url"],
-        )
-
 
         # Format embed
         embed = discord.Embed(
@@ -132,10 +114,27 @@ class CustomEventModal(discord.ui.Modal):
         )
         embed.set_thumbnail(url=event_info["logo"])
 
+        # Reply to the modal
+        await interaction.response.send_message(embed=embed)
+
+        # Create team
+        role = await create_team(self.ctx, self.team_name, self.users)
+
+        # Create ctf channel
+        channel, team_id = await create_ctf_channel(self.ctx, role, event_info)
+
         # Send embed into text channel
         msg = await channel.send(embed=embed)
         await msg.pin()
 
+        # Schedule event
+        scheduled_event = await interaction.guild.create_scheduled_event(
+                name=event_info["title"],
+                description=event_info["description"],
+                start_time=event_info["start"],
+                end_time=event_info["finish"],
+                location=event_info["url"],
+        )
 
         with config.Connect() as cnx:
             cursor = cnx.cursor()
@@ -157,7 +156,6 @@ class CustomEventModal(discord.ui.Modal):
                         channel.id,
                     )
             )
-            await interaction.response.send_message(embed=embed)
             cnx.commit()
 
 # --- view requesting team info ---
