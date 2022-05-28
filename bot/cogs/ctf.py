@@ -1,12 +1,11 @@
 import asyncio
-import datetime
+from datetime import datetime, time, timezone
 import json
 import logging
 import os
 import secrets
-import time
 
-from dateutil import parser
+from dateutil import parser, tz
 import discord
 from discord.commands import slash_command, SlashCommandGroup
 from discord.ext import commands, tasks
@@ -69,15 +68,16 @@ class CustomEventModal(discord.ui.Modal):
         event_info["title"] = self.children[0].value
         event_info["description"] = self.children[1].value
         duration = self.children[2].value
-        duration = duration.replace('+', '-')
-        duration = duration.replace('-', '+')
         event_info["url"] = self.children[3].value
         event_info["logo"] = interaction.user.display_avatar.url
+
+        # to force timezone
+        default_date = datetime.combine(datetime.now(), time(0, tzinfo=tz.gettz('Asia/Singapore')))
         try:
             duration = duration.split(' to ')
-            event_info["start"] = datetime.datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True).timestamp())
-            event_info["finish"] = datetime.datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True).timestamp())
-        except Exception as e:
+            event_info["start"] = datetime.fromtimestamp(parser.parse(duration[0], ignoretz=True, default=default_date).timestamp())
+            event_info["finish"] = datetime.fromtimestamp(parser.parse(duration[1], ignoretz=True, default=default_date).timestamp())
+        except:
             # Couldn't parse time
             await interaction.response.send_message('Invalid time specified', ephemeral=True)
             return
@@ -85,7 +85,7 @@ class CustomEventModal(discord.ui.Modal):
             # Start is after finish
             await interaction.response.send_message('The start time can\'t be after the end time!', ephemeral=True)
             return
-        elif datetime.datetime.now() >= event_info["start"] or datetime.datetime.now() >= event_info["finish"]:
+        elif datetime.now() >= event_info["start"] or datetime.now() >= event_info["finish"]:
             # Start time or end time before current time
             await interaction.response.send_message('The CTF has already started/is already over.', ephemeral=True)
             return
@@ -227,8 +227,8 @@ async def get_ctf_details(ctftime_link):
     event_info = json.loads(req.content)
     if len(event_info['description']) > 1000:
         event_info['description'] = event_info['description'][:997] + '...'
-    event_info['start'] = datetime.datetime.fromisoformat(event_info['start'])
-    event_info['finish'] = datetime.datetime.fromisoformat(event_info['finish'])
+    event_info['start'] = datetime.fromisoformat(event_info['start'])
+    event_info['finish'] = datetime.fromisoformat(event_info['finish'])
     event_info['discord_inv'] = regex.search(
             '((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?',
             event_info['description'],
@@ -388,14 +388,14 @@ class CTF(commands.Cog):
             return
 
         # Check if timing is valid
-        if datetime.datetime.now(datetime.timezone.utc) > event_info['finish']:
+        if datetime.now(timezone.utc) > event_info['finish']:
             # CTF has already ended
             await ctx.respond('This CTF is already over.', ephemeral=True)
             return
-        elif datetime.datetime.now(datetime.timezone.utc) > event_info['start']:
+        elif datetime.now(timezone.utc) > event_info['start']:
             # Start time cannot be in the past 
             # Add a 5 second buffer to account for lag
-            event_info['start'] = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=5)
+            event_info['start'] = datetime.now(timezone.utc) + timedelta(seconds=5)
 
         # Let's defer
         await ctx.defer()
@@ -554,7 +554,7 @@ class CTF(commands.Cog):
                             'WHERE id = %s',
                             (ctf['id'],),
                     )
-                elif datetime.datetime.fromtimestamp(ctf['start']) <= datetime.datetime.now() and ctf['reminded'] != 2:
+                elif datetime.fromtimestamp(ctf['start']) <= datetime.now() and ctf['reminded'] != 2:
                     # CTF has started
                     cursor.execute(
                             'UPDATE ctf SET reminded = 2 '\
@@ -572,17 +572,17 @@ class CTF(commands.Cog):
                     embed.set_thumbnail(url=ctf['logo'])
                     embed.add_field(
                             name='Starts at',
-                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['start'])),
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['start'])),
                     )
                     embed.add_field(
                             name='Ends at',
-                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['finish'])),
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['finish'])),
                     )
                     embed.url = ctf['url']
                     await channel.send('@everyone The CTF is starting!', embed=embed)
                     cnx.commit()
                     return
-                elif (datetime.datetime.now() - datetime.datetime.fromtimestamp(ctf['start'])).days == -1 \
+                elif (datetime.now() - datetime.fromtimestamp(ctf['start'])).days == -1 \
                         and ctf['reminded'] != 1:
                     # The CTF will start in 1 day
                     cursor.execute(
@@ -600,17 +600,17 @@ class CTF(commands.Cog):
                     embed.set_thumbnail(url=ctf['logo']) if ctf['logo'] != None else None
                     embed.add_field(
                             name='Starts at',
-                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['start'])),
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['start'])),
                     )
                     embed.add_field(
                             name='Ends at',
-                            value=discord.utils.format_dt(datetime.datetime.fromtimestamp(ctf['finish'])),
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['finish'])),
                     )
                     embed.url = ctf['url']
                     await channel.send('@everyone The CTF will start in 1 day!', embed=embed)
                     cnx.commit()
                     return
-                elif datetime.datetime.now() > datetime.datetime.fromtimestamp(ctf['finish']):
+                elif datetime.now() > datetime.fromtimestamp(ctf['finish']):
                     # CTF is over
                     cursor.execute(
                             'UPDATE ctf SET archived = 1 '\
