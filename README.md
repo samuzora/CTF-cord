@@ -4,12 +4,10 @@ A Discord bot for all your CTF management needs.
 
 ## Features
 
-* CTF management
-	* CTF details pulled from CTFtime and converted into an embed
-	* Private channels, scheduled events and team roles automatically created
-	* Score and challenge solves tracking
-	* Supports non-CTFtime CTFs too!
-
+* CTF details pulled from CTFtime and converted into an embed
+* Private channels, scheduled events and team roles 
+* Tracks each member's score 
+* Supports non-CTFtime CTFs too!
 * Weekly sends upcoming CTFs on CTFtime
 
 ## Documentation
