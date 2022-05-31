@@ -650,7 +650,6 @@ class CTF(commands.Cog):
     async def update_ctftime(self):
         # only run loop at 8am GMT+8
         if datetime.now().hour != 8:
-            print('asdf')
             return
         with config.Connect() as cnx:
             cursor = cnx.cursor()
