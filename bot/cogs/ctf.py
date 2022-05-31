@@ -1,13 +1,10 @@
-import asyncio
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 import json
-import logging
-import os
 import secrets
 
 from dateutil import parser, tz
 import discord
-from discord.commands import slash_command, SlashCommandGroup
+from discord.commands import SlashCommandGroup
 from discord.ext import commands, tasks
 import regex
 import requests
@@ -201,7 +198,7 @@ class TeamInfoModal(discord.ui.Modal):
         await msg.pin()
 
 # === FUNCTIONS ===
-# --- internal command to get CTF details ---
+# --- internal function to get CTF details ---
 async def get_ctf_details(ctftime_link):
     # Check whether the link is valid
     event_id = regex.search('[0-9]+', ctftime_link)
@@ -236,7 +233,36 @@ async def get_ctf_details(ctftime_link):
     event_info['id'] = event_id
     return event_info
 
-# --- internal command to get team based on channel ---
+# --- internal function to convert event details to embed ---
+async def details_to_embed(event_info):
+    # ID is correct, formatting embed
+    embed = discord.Embed(
+            title=event_info['title'],
+            description=event_info['description'],
+            colour=discord.Colour.random()
+    )
+    embed.set_thumbnail(url=event_info['logo'])
+    embed.add_field(
+            name='Starts at',
+            value=discord.utils.format_dt(event_info['start']),
+    )
+    embed.add_field(
+            name='Ends at',
+            value=discord.utils.format_dt(event_info['finish']),
+    )
+    embed.add_field(
+            name='CTFtime',
+            value=f'<https://ctftime.org/event/{event_info["id"]}>',
+    )
+    embed.url = event_info['url']
+    if event_info.get('discord_inv') is not None:
+        embed.add_field(
+                name='Discord Server',
+                value=f'[Click here to join!]({event_info["discord_inv"]})',
+        )
+    return embed
+
+# --- internal function to get team based on channel ---
 async def get_team(ctx):
     with config.Connect() as cnx:
         cursor = cnx.cursor()
@@ -247,7 +273,7 @@ async def get_team(ctx):
     else:
         return False
 
-# --- internal command to create team ---
+# --- internal function to create team ---
 async def create_team(ctx, name, users):
     # Create role and assign to all relevant members
     role = await ctx.guild.create_role(name=name, color=discord.Color.random())
@@ -262,7 +288,7 @@ async def create_team(ctx, name, users):
     # Return the new team's id
     return role
 
-# --- internal command to create channel for ctf ---
+# --- internal function to create channel for ctf ---
 async def create_ctf_channel(ctx, role, event_info):
     # Create channel and allow access to ppl w the team role
     # Define perms
@@ -308,6 +334,7 @@ class CTF(commands.Cog):
         super().__init__()
         self.bot = bot
         self.check_ctf.start()
+        self.update_ctftime.start()
 
 
     # --- slash command group ---
@@ -323,31 +350,7 @@ class CTF(commands.Cog):
             await ctx.respond("This isn't a valid CTFtime event link or id.", ephemeral=True)
             return
 
-        # ID is correct, formatting embed
-        embed = discord.Embed(
-                title=event_info['title'],
-                description=event_info['description'],
-                colour=discord.Colour.random()
-        )
-        embed.set_thumbnail(url=event_info['logo'])
-        embed.add_field(
-                name='Starts at',
-                value=discord.utils.format_dt(event_info['start']),
-        )
-        embed.add_field(
-                name='Ends at',
-                value=discord.utils.format_dt(event_info['finish']),
-        )
-        embed.add_field(
-                name='CTFtime',
-                value=f'<https://ctftime.org/event/{event_info["id"]}>',
-        )
-        embed.url = event_info['url']
-        if event_info['discord_inv'] is not None:
-            embed.add_field(
-                    name='Discord Server',
-                    value=f'[Click here to join!]({event_info["discord_inv"]})',
-            )
+        embed = await details_to_embed(event_info)
         await ctx.respond(embed=embed)
 
 
@@ -406,32 +409,7 @@ class CTF(commands.Cog):
         # Create text channel for CTF
         channel, team_id = await create_ctf_channel(ctx, role, event_info)
 
-        # Format embed
-        embed = discord.Embed(
-                title=event_info['title'],
-                description=event_info['description'],
-                colour=discord.Colour.random(),
-        )
-        embed.set_thumbnail(url=event_info['logo'])
-        embed.add_field(
-                name='Starts at',
-                value=discord.utils.format_dt(event_info['start']),
-        )
-        embed.add_field(
-                name='Ends at',
-                value=discord.utils.format_dt(event_info['finish']),
-        )
-        embed.add_field(
-                name='CTFtime',
-                value=f'<https://ctftime.org/event/{event_info["id"]}>',
-        )
-        embed.url = event_info['url']
-        if event_info['discord_inv'] is not None:
-            embed.add_field(
-                    name='Discord Server',
-                    value=f'[Click here to join!]({event_info["discord_inv"]})',
-            )
-        
+        embed = await details_to_embed(event_info)
         # Send modal to request for team info
         # await ctx.send_modal(TeamInfoModal(self.bot, channel, embed, team_name)) # this will error with InteractionNotFound if 3 seconds has passed since invocation
         # a fix would be to defer, but i haven't figured out how to defer and then send a modal as a followup
@@ -666,6 +644,39 @@ class CTF(commands.Cog):
                     await channel.send('@everyone The CTF has ended!', embed=embed)
                     return
 
+
+    # --- task loop to update CTFtime
+    @tasks.loop(hours=1.0)
+    async def update_ctftime(self):
+        # only run loop at 8am GMT+8
+        if datetime.now().hour != 8:
+            print('asdf')
+            return
+        with config.Connect() as cnx:
+            cursor = cnx.cursor()
+            # Get all guilds that configured the updates to send on this day of the week
+            day = datetime.now().weekday()
+            cursor.execute(
+                    'SELECT ctftime_channel FROM guilds WHERE ctftime_send_day = %s AND ctftime_channel IS NOT NULL',
+                    (day,)
+            )
+            channel_ids = cursor.fetchall()
+
+        # Get all CTFs that start in a week
+        start, finish = int(datetime.now().timestamp()), int((datetime.now() + timedelta(days=7)).timestamp())
+        headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0"
+        } # CTFtime will 403 if this is not added
+        req = requests.get(f'https://ctftime.org/api/v1/events/?limit=100&start={start}&finish={finish}', headers=headers)
+        embeds = []
+        for ctf in json.loads(req.content):
+            ctf['start'], ctf['finish'] = datetime.fromisoformat(ctf['start']), datetime.fromisoformat(ctf['finish'])
+            embeds.append(await details_to_embed(ctf))
+
+        # Send embeds
+        for channel_id in channel_ids:
+            channel = await self.bot.fetch_channel(channel_id[0])
+            await channel.send(embeds=embeds)
 
 # --- load cog ---
 def setup(bot):

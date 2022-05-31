@@ -85,4 +85,5 @@ if __name__ == "__main__":
     bot.load_extension("cogs.ctf")
     bot.load_extension("cogs.chall")
     bot.load_extension("cogs.dev")
+    bot.load_extension("cogs.settings")
     bot.run(token)
