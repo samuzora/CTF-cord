@@ -1,6 +1,7 @@
 from datetime import datetime, time, timezone, timedelta
 import json
 import secrets
+from time import mktime
 
 from dateutil import parser, tz
 import discord
@@ -226,10 +227,13 @@ async def get_ctf_details(ctftime_link):
         event_info['description'] = event_info['description'][:997] + '...'
     event_info['start'] = datetime.fromisoformat(event_info['start'])
     event_info['finish'] = datetime.fromisoformat(event_info['finish'])
-    event_info['discord_inv'] = regex.search(
+    if (a := regex.search(
             '((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?',
             event_info['description'],
-    )
+    )) != None:
+        event_info['discord_inv'] = a.group(0)
+    else:
+        event_info['discord_inv'] = None
     event_info['id'] = event_id
     return event_info
 
@@ -443,8 +447,8 @@ class CTF(commands.Cog):
                         event_info['id'],
                         event_info['title'],
                         event_info['description'],
-                        int(time.mktime(event_info['start'].timetuple())),
-                        int(time.mktime(event_info['finish'].timetuple())),
+                        int(mktime(event_info['start'].timetuple())),
+                        int(mktime(event_info['finish'].timetuple())),
                         event_info['discord_inv'],
                         event_info['participants'],
                         event_info['url'],
