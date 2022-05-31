@@ -33,7 +33,7 @@ A Discord bot for all your CTF management needs.
 	* Your team's name for that CTF, used to create roles for the team
 * `ctftime_link: str = ''`
 	* Link to the CTF on CTFtime, can also be the 4-digit ID of the CTF. If left blank, a custom CTF (not based on CTFtime) can be created
-* `users1-4`: discord.User = None
+* `users1-4: discord.User = None`
 	* Can be used to add users to your team. Currently, up to a maximum of 5 members inclusive of yourself can be added to a team
 
 ##### `/ctf unsignup`
