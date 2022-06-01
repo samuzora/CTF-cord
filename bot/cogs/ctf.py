@@ -1,6 +1,5 @@
-from datetime import datetime, time, timezone, timedelta
+from datetime import datetime, time, timedelta, timezone
 import json
-import secrets
 from time import mktime
 
 from dateutil import parser, tz
@@ -150,53 +149,6 @@ class CustomEventModal(discord.ui.Modal):
                     )
             )
             cnx.commit()
-
-# --- view requesting team info ---
-# This modal is archived for now, until pycord supports modals as followups
-class TeamInfoModal(discord.ui.Modal):
-    def __init__(self, bot, channel, embed, team_name):
-        self.bot = bot
-        self.target_channel = channel
-        self.embed = embed
-        super().__init__(title="Team Info")
-        # Team name
-        self.add_item(
-            discord.ui.InputText(
-                label="Team name aka. team username to log in",
-                placeholder="Foobar",
-                style=discord.InputTextStyle.short,
-                value=team_name,
-            )
-        )
-
-        # Team password
-        self.add_item(
-            discord.ui.InputText(
-                label="Team password",
-                placeholder="Strong password here...",
-                style=discord.InputTextStyle.short,
-                required=False,
-            )
-        )
-
-
-    async def callback(self, interaction: discord.Interaction):
-        # Extract data from form
-        team_name = self.children[0].value
-        if (password := self.children[1].value) == '':
-            password = secrets.token_urlsafe(30)
-
-        # Format embed
-        embed = self.embed.copy()
-        embed.add_field(
-                name="Creds",
-                value=password,
-                inline=True
-        )
-
-        # Send embed into designated ctf channel
-        msg = await self.target_channel.send(embed=embed)
-        await msg.pin()
 
 # === FUNCTIONS ===
 # --- internal function to get CTF details ---
@@ -414,11 +366,6 @@ class CTF(commands.Cog):
         channel, team_id = await create_ctf_channel(ctx, role, event_info)
 
         embed = await details_to_embed(event_info)
-        # Send modal to request for team info
-        # await ctx.send_modal(TeamInfoModal(self.bot, channel, embed, team_name)) # this will error with InteractionNotFound if 3 seconds has passed since invocation
-        # a fix would be to defer, but i haven't figured out how to defer and then send a modal as a followup
-        # or js pray it doesn't time out
-        # or nvm i won't support this (see note at TeamInfoModal)
 
         # Create scheduled event
         scheduled_event = await ctx.guild.create_scheduled_event(
@@ -516,6 +463,24 @@ class CTF(commands.Cog):
                     (team,)
             )
             cnx.commit()
+
+    
+    # --- /ctf upcoming ---
+    @ctf.command(description="View CTFs upcoming in the next week.")
+    async def upcoming(self, ctx):
+        # Get all CTFs that start in a week
+        start, finish = int(datetime.now().timestamp()), int((datetime.now() + timedelta(days=7)).timestamp())
+        headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0"
+        } # CTFtime will 403 if this is not added
+        req = requests.get(f'https://ctftime.org/api/v1/events/?limit=100&start={start}&finish={finish}', headers=headers)
+        embeds = []
+        for ctf in json.loads(req.content):
+            ctf['start'], ctf['finish'] = datetime.fromisoformat(ctf['start']), datetime.fromisoformat(ctf['finish'])
+            embeds.append(await details_to_embed(ctf))
+
+        # Send embed
+        await ctx.respond(embeds=embeds)
 
 
     # --- task loop to check for CTFs ---

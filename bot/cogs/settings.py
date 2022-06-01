@@ -12,7 +12,7 @@ import config
 # --- settings modal ---
 class CtftimeConfigModal(discord.ui.Modal):
     def __init__(self, bot, guild_config):
-        super().__init__(title="CTFtime Weekly Updates config")
+        super().__init__(title="Configure CTFtime weekly updates")
         self.bot = bot
         self.guild_config = guild_config
         self.add_item(
@@ -26,6 +26,8 @@ class CtftimeConfigModal(discord.ui.Modal):
                     label="Channel ID to send updates to",
                     style=discord.InputTextStyle.short,
                     required=False,
+                    min_length=18,
+                    max_length=18,
             )
         )
 
@@ -33,6 +35,7 @@ class CtftimeConfigModal(discord.ui.Modal):
                 discord.ui.InputText(
                     label="Day of week to send updates",
                     style=discord.InputTextStyle.short,
+                    min_length=3,
                     required=False,
             )
         )
@@ -41,10 +44,13 @@ class CtftimeConfigModal(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         # Get data
         enabled = True if self.children[0].value.lower() == 'y' else False
-        if enabled:
+        try:
+            assert enabled
             channel_id = int(self.children[1].value)
             send_day = parse(self.children[2].value).weekday()
-        else:
+            channel = self.bot.get_channel(channel_id)
+            assert channel != None
+        except:
             channel_id = send_day = None
 
         self.guild_config['ctftime_channel'] = channel_id
@@ -57,8 +63,6 @@ class CtftimeConfigModal(discord.ui.Modal):
                 (interaction.guild.id, interaction.guild.name, channel_id, send_day),
             )
             cnx.commit()
-
-        channel = self.bot.get_channel(channel_id)
         embed = await config_to_embed(self.guild_config)
         await interaction.response.edit_message(embed=embed)
 
@@ -94,7 +98,7 @@ async def config_to_embed(guild_config):
     return embed
 
 
-
+# --- /settings ---
 class Settings(commands.Cog):
     """ Configure the bot here! """
 
@@ -103,7 +107,7 @@ class Settings(commands.Cog):
         self.bot = bot
 
     # --- /settings ---
-    @slash_command()
+    @slash_command(description="Bot settings")
     async def settings(self, ctx):
         # Get guild's current config
         with config.Connect() as cnx:
