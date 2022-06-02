@@ -3,9 +3,10 @@ import datetime
 import os
 
 import discord
-from discord.commands import slash_command, SlashCommandGroup
+from discord.commands import SlashCommandGroup, slash_command
 from discord.ext import commands
 import mysql.connector
+from prettytable import PrettyTable
 
 import config
 
@@ -42,7 +43,12 @@ class Dev(commands.Cog):
             else:
                 out = cursor.fetchall()
             cnx.commit()
-        print(out)
+        table = PrettyTable()
+        table.field_names = [d[0] for d in cursor.description]
+        for row in out:
+            table.add_row(row)
+        print(table)
+
         await ctx.respond("Check logs", ephemeral=True)
     
 
