@@ -10,6 +10,8 @@ A Discord bot for all your CTF management needs.
 * Supports non-CTFtime CTFs too!
 * Weekly sends upcoming CTFs on CTFtime
 
+[Add it to your server!](https://discord.com/api/oauth2/authorize?client_id=934122115366547526&permissions=541434768464&scope=bot%20applications.commands)
+
 ## Documentation
 
 ### /ctf
