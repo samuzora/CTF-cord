@@ -29,7 +29,6 @@ CREATE TABLE `challenges` (
   `ctf` int NOT NULL,
   `solver` bigint NOT NULL,
   `team` int NOT NULL,
-  `solved` tinyint(1) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `challenge` (`name`,`ctf`,`team`)
 ) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

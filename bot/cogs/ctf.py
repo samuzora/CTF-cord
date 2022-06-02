@@ -13,7 +13,135 @@ import config
 
 # TODO: Add /archive command to allow users to archive a CTF manually
 
-# === CLASSES ===
+# === FUNCTIONS ===
+# --- internal function to get CTF details ---
+async def get_ctf_details(ctftime_link):
+    # Check whether the link is valid
+    event_id = regex.search('[0-9]+', ctftime_link)
+    if event_id is None:
+        # The link is not valid
+        return False
+    else:
+        event_id = event_id.group()
+    
+    headers = {
+            "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0"
+    } # CTFtime will 403 if this is not added
+
+    # Grab JSON via API
+    req = requests.get(
+            f'https://ctftime.org/api/v1/events/{event_id}/', headers=headers,
+    )
+    if req.status_code == 404:
+        # API returned 404
+        return False
+
+    # ID is valid
+    event_info = json.loads(req.content)
+    if len(event_info['description']) > 1000:
+        event_info['description'] = event_info['description'][:997] + '...'
+    event_info['start'] = datetime.fromisoformat(event_info['start'])
+    event_info['finish'] = datetime.fromisoformat(event_info['finish'])
+    if (a := regex.search(
+            '((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?',
+            event_info['description'],
+    )) != None:
+        event_info['discord_inv'] = a.group(0)
+    else:
+        event_info['discord_inv'] = None
+    event_info['id'] = event_id
+    return event_info
+
+# --- internal function to convert event details to embed ---
+async def details_to_embed(event_info):
+    # ID is correct, formatting embed
+    embed = discord.Embed(
+            title=event_info['title'],
+            description=event_info['description'],
+            colour=discord.Colour.random()
+    )
+    embed.set_thumbnail(url=event_info['logo'])
+    embed.add_field(
+            name='Starts at',
+            value=discord.utils.format_dt(event_info['start']),
+    )
+    embed.add_field(
+            name='Ends at',
+            value=discord.utils.format_dt(event_info['finish']),
+    )
+    embed.add_field(
+            name='CTFtime',
+            value=f'<https://ctftime.org/event/{event_info["id"]}>',
+    )
+    embed.url = event_info['url']
+    if event_info.get('discord_inv') is not None:
+        embed.add_field(
+                name='Discord Server',
+                value=f'[Click here to join!]({event_info["discord_inv"]})',
+        )
+    return embed
+
+# --- internal function to get team based on channel ---
+async def get_team(ctx):
+    with config.Connect() as cnx:
+        cursor = cnx.cursor()
+        cursor.execute('SELECT id FROM teams WHERE channel = %s', (ctx.channel.id,))
+        team = cursor.fetchone()
+    if team != None:
+        return team[0]
+    else:
+        return False
+
+# --- internal function to create team ---
+async def create_team(ctx, name, users):
+    # Create role and assign to all relevant members
+    role = await ctx.guild.create_role(name=name, color=discord.Color.random())
+    """for member in members:
+        try:
+            await member.add_roles(role)
+        except discord.errors.HTTPException:
+            logging.warning(f'Could not add {role} to {member}')
+    """
+    for user in users:
+        await user.add_roles(role)
+    # Return the new team's id
+    return role
+
+# --- internal function to create channel for ctf ---
+async def create_ctf_channel(ctx, role, event_info):
+    # Create channel and allow access to ppl w the team role
+    # Define perms
+    perms = {
+        ctx.guild.default_role: \
+            discord.PermissionOverwrite(view_channel=False),
+        ctx.guild.me: \
+            discord.PermissionOverwrite(view_channel=True),
+        role: \
+            discord.PermissionOverwrite(view_channel=True),
+        }
+
+    # Create channel
+    ctf_channel = await ctx.guild.create_text_channel(
+            event_info['title'],
+            topic=event_info['url'],
+            overwrites=perms,
+    )
+
+    # Update db with new team info
+    with config.Connect() as cnx:
+        cursor = cnx.cursor()
+        cursor.execute(
+                'INSERT INTO teams (name, role, guild, channel) '\
+                'VALUES (%s, %s, %s, %s)', 
+                (role.name, role.id, ctx.guild.id, ctf_channel.id)
+        )
+        cursor.execute('SELECT LAST_INSERT_ID()')
+        team = cursor.fetchone()[0]
+        cnx.commit()
+
+    return ctf_channel, team
+
+# === VIEWS ===
 # --- view for custom event menu ---
 class CustomEventModal(discord.ui.Modal):
     def __init__(self, bot, ctx, team_name, users):
@@ -149,134 +277,6 @@ class CustomEventModal(discord.ui.Modal):
                     )
             )
             cnx.commit()
-
-# === FUNCTIONS ===
-# --- internal function to get CTF details ---
-async def get_ctf_details(ctftime_link):
-    # Check whether the link is valid
-    event_id = regex.search('[0-9]+', ctftime_link)
-    if event_id is None:
-        # The link is not valid
-        return False
-    else:
-        event_id = event_id.group()
-    
-    headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:61.0) Gecko/20100101 Firefox/61.0"
-    } # CTFtime will 403 if this is not added
-
-    # Grab JSON via API
-    req = requests.get(
-            f'https://ctftime.org/api/v1/events/{event_id}/', headers=headers,
-    )
-    if req.status_code == 404:
-        # API returned 404
-        return False
-
-    # ID is valid
-    event_info = json.loads(req.content)
-    if len(event_info['description']) > 1000:
-        event_info['description'] = event_info['description'][:997] + '...'
-    event_info['start'] = datetime.fromisoformat(event_info['start'])
-    event_info['finish'] = datetime.fromisoformat(event_info['finish'])
-    if (a := regex.search(
-            '((https://)?|(https://)?)(www.)?discord.(gg|(com/invite))/[A-Za-z0-9]+/?',
-            event_info['description'],
-    )) != None:
-        event_info['discord_inv'] = a.group(0)
-    else:
-        event_info['discord_inv'] = None
-    event_info['id'] = event_id
-    return event_info
-
-# --- internal function to convert event details to embed ---
-async def details_to_embed(event_info):
-    # ID is correct, formatting embed
-    embed = discord.Embed(
-            title=event_info['title'],
-            description=event_info['description'],
-            colour=discord.Colour.random()
-    )
-    embed.set_thumbnail(url=event_info['logo'])
-    embed.add_field(
-            name='Starts at',
-            value=discord.utils.format_dt(event_info['start']),
-    )
-    embed.add_field(
-            name='Ends at',
-            value=discord.utils.format_dt(event_info['finish']),
-    )
-    embed.add_field(
-            name='CTFtime',
-            value=f'<https://ctftime.org/event/{event_info["id"]}>',
-    )
-    embed.url = event_info['url']
-    if event_info.get('discord_inv') is not None:
-        embed.add_field(
-                name='Discord Server',
-                value=f'[Click here to join!]({event_info["discord_inv"]})',
-        )
-    return embed
-
-# --- internal function to get team based on channel ---
-async def get_team(ctx):
-    with config.Connect() as cnx:
-        cursor = cnx.cursor()
-        cursor.execute('SELECT id FROM teams WHERE channel = %s', (ctx.channel.id,))
-        team = cursor.fetchone()
-    if team != None:
-        return team[0]
-    else:
-        return False
-
-# --- internal function to create team ---
-async def create_team(ctx, name, users):
-    # Create role and assign to all relevant members
-    role = await ctx.guild.create_role(name=name, color=discord.Color.random())
-    """for member in members:
-        try:
-            await member.add_roles(role)
-        except discord.errors.HTTPException:
-            logging.warning(f'Could not add {role} to {member}')
-    """
-    for user in users:
-        await user.add_roles(role)
-    # Return the new team's id
-    return role
-
-# --- internal function to create channel for ctf ---
-async def create_ctf_channel(ctx, role, event_info):
-    # Create channel and allow access to ppl w the team role
-    # Define perms
-    perms = {
-        ctx.guild.default_role: \
-            discord.PermissionOverwrite(view_channel=False),
-        ctx.guild.me: \
-            discord.PermissionOverwrite(view_channel=True),
-        role: \
-            discord.PermissionOverwrite(view_channel=True),
-        }
-
-    # Create channel
-    ctf_channel = await ctx.guild.create_text_channel(
-            event_info['title'],
-            topic=event_info['url'],
-            overwrites=perms,
-    )
-
-    # Update db with new team info
-    with config.Connect() as cnx:
-        cursor = cnx.cursor()
-        cursor.execute(
-                'INSERT INTO teams (name, role, guild, channel) '\
-                'VALUES (%s, %s, %s, %s)', 
-                (role.name, role.id, ctx.guild.id, ctf_channel.id)
-        )
-        cursor.execute('SELECT LAST_INSERT_ID()')
-        team = cursor.fetchone()[0]
-        cnx.commit()
-
-    return ctf_channel, team
 
 # === SLASH COMMANDS ===
 # --- /ctf --- 
@@ -501,36 +501,7 @@ class CTF(commands.Cog):
                             'WHERE id = %s',
                             (ctf['id'],),
                     )
-                elif datetime.fromtimestamp(ctf['start']) <= datetime.now() and ctf['reminded'] != 2:
-                    # CTF has started
-                    cursor.execute(
-                            'UPDATE ctf SET reminded = 2 '\
-                            'WHERE id = %s',
-                            (ctf['id'],),
-                    )
-
-                    # Send reminder
-                    # TODO: add option to turn off @everyone
-                    embed = discord.Embed(
-                            title=ctf['title'],
-                            description=ctf['description'],
-                            colour=discord.Colour.blurple(),
-                    )
-                    embed.set_thumbnail(url=ctf['logo'])
-                    embed.add_field(
-                            name='Starts at',
-                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['start'])),
-                    )
-                    embed.add_field(
-                            name='Ends at',
-                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['finish'])),
-                    )
-                    embed.url = ctf['url']
-                    await channel.send('@everyone The CTF is starting!', embed=embed)
-                    cnx.commit()
-                    return
-                elif (datetime.now() - datetime.fromtimestamp(ctf['start'])).days == -1 \
-                        and ctf['reminded'] != 1:
+                elif (datetime.fromtimestamp(ctf['start']) - datetime.now()).days == 1 and ctf['reminded'] != 1:
                     # The CTF will start in 1 day
                     cursor.execute(
                             'UPDATE ctf SET reminded = 1 '\
@@ -538,7 +509,6 @@ class CTF(commands.Cog):
                             (ctf['id'],),
                     )
                     # Send reminder
-                    # TODO: add option to turn off @everyone
                     embed = discord.Embed(
                             title=ctf['title'],
                             description=ctf['description'],
@@ -557,6 +527,33 @@ class CTF(commands.Cog):
                     await channel.send('@everyone The CTF will start in 1 day!', embed=embed)
                     cnx.commit()
                     return
+                elif datetime.fromtimestamp(ctf['start']) <= datetime.now() and ctf['reminded'] != 2:
+                    # CTF has started
+                    cursor.execute(
+                            'UPDATE ctf SET reminded = 2 '\
+                            'WHERE id = %s',
+                            (ctf['id'],),
+                    )
+
+                    # Send reminder
+                    embed = discord.Embed(
+                            title=ctf['title'],
+                            description=ctf['description'],
+                            colour=discord.Colour.blurple(),
+                    )
+                    embed.set_thumbnail(url=ctf['logo'])
+                    embed.add_field(
+                            name='Starts at',
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['start'])),
+                    )
+                    embed.add_field(
+                            name='Ends at',
+                            value=discord.utils.format_dt(datetime.fromtimestamp(ctf['finish'])),
+                    )
+                    embed.url = ctf['url']
+                    await channel.send('@everyone The CTF is starting!', embed=embed)
+                    cnx.commit()
+                    return
                 elif datetime.now() > datetime.fromtimestamp(ctf['finish']):
                     # CTF is over
                     cursor.execute(
@@ -565,30 +562,10 @@ class CTF(commands.Cog):
                             (ctf['id'], ctf['team']),
                     )
 
-                    # Get category to archive to
-                    cursor.execute(
-                            'SELECT archived_category FROM teams '\
-                            'WHERE id = %s',
-                            (ctf['team'],),
-                    )
-
-                    if (archived := self.bot.get_channel(cursor.fetchall()[0][0])) is None:
-                        # Archived channel not found, create new
-                        # Get guild of channel
-                        archived = await channel.guild.create_category_channel('Archived')
-                        cursor.execute(
-                                'UPDATE teams SET archived_category = %s '\
-                                'WHERE id = %s',
-                                (archived.id, ctf['team']),
-                        )
-
-                    # Place text channel in archived category
-                    await channel.edit(category=archived)
-
                     # Get all members in team and their scores
                     cursor.execute(
                             'SELECT solver, points FROM challenges '\
-                            'WHERE team = %s AND ctf = %s AND solved = 1',
+                            'WHERE team = %s AND ctf = %s',
                             (ctf['team'], ctf['id']),
                     )
                     challenges = cursor.fetchall()
@@ -607,6 +584,7 @@ class CTF(commands.Cog):
                             description='Point distribution:\n' + members,
                             colour=discord.Colour.green(),
                     )
+                    embed.set_footer(text='To update the challenge points, run /chall solved with the updated points')
 
                     # Send info
                     cnx.commit()
