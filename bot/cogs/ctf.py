@@ -501,7 +501,8 @@ class CTF(commands.Cog):
                             'WHERE id = %s',
                             (ctf['id'],),
                     )
-                elif (datetime.fromtimestamp(ctf['start']) - datetime.now()).days == 1 and ctf['reminded'] != 1:
+                elif (datetime.fromtimestamp(ctf['start']) - datetime.now()).days == 0 and ctf['reminded'] != 1:
+                    # if i start at 100, i want this part to be called between 99 and 100, hence days == 0
                     # The CTF will start in 1 day
                     cursor.execute(
                             'UPDATE ctf SET reminded = 1 '\
@@ -528,6 +529,7 @@ class CTF(commands.Cog):
                     cnx.commit()
                     return
                 elif datetime.fromtimestamp(ctf['start']) <= datetime.now() and ctf['reminded'] != 2:
+                    # if i start at 100, i want this part to be called right after i pass 100, hence start <= now
                     # CTF has started
                     cursor.execute(
                             'UPDATE ctf SET reminded = 2 '\
