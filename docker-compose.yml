@@ -10,6 +10,7 @@ services:
       MYSQL_DB: mysql
   mysql:
     build: ./mysql
+    restart: always
     volumes:
       - ./mysql/mysqldata:/var/lib/mysql
     environment:
