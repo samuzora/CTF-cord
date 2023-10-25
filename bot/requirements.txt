@@ -1,7 +1,0 @@
-mysql-connector-python==8.0.27
-git+https://github.com/Pycord-Development/pycord#egg=py-cord
-python-dateutil==2.8.2
-requests==2.26.0
-regex==2021.11.10
-dateparser==1.1.1
-prettytable==3.2.0

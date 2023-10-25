@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+regex = "*"
+py-cord = "*"
+zodb = "*"
+
+[dev-packages]
+types-regex = "*"
+types-requests = "*"
+
+[requires]
+python_version = "3.11"
+
+[scripts]
+dev = "python3 src/main.py"

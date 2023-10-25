@@ -1,0 +1,10 @@
+[project]
+name = "ctf-cord"
+version = ""
+description = ""
+authors = [
+    {name = "samuzora", email = "lucastanyj@gmail.com"},
+]
+readme = "README.md"
+license = {text = "MIT"}
+
