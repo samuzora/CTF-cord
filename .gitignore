@@ -1,5 +1,6 @@
 .env
 src/data/
+nohup.out
 
 .mypy_cache/
 .venv/
