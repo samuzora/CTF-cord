@@ -14,7 +14,7 @@ types-regex = "*"
 types-requests = "*"
 
 [requires]
-python_version = "3.11"
+python_version = "3.10"
 
 [scripts]
 dev = "python3 src/main.py"
