@@ -31,7 +31,7 @@ def get_conn():
         # make sure database schema is up-to-date
         with db.transaction() as tx:
             root = tx.root()
-            if "ctfs" not in root:
+            if not hasattr(root, "ctfs"):
                 # {unsigned 64: Ctf}
                 root.ctfs = BTrees.QOBTree.BTree() # type: ignore
     return db
