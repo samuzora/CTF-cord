@@ -1,9 +1,9 @@
 import os
 
-import ZODB  # type: ignore
+import ZODB
 
-from persistent import Persistent  # type: ignore
-import BTrees.OOBTree  # type: ignore
+from persistent import Persistent
+import BTrees
 
 db = None
 
@@ -16,16 +16,15 @@ class Ctf(Persistent):
 
 
 class Challenge(Persistent):
-    def __init__(self, name: str, solved: bool):
+    def __init__(self, name: str, solved_by: int):
         self.name: str = name
-        self.solved: bool = solved
-        self.solved_by: int = 0
+        self.solved_by: int = solved_by
 
 
 def get_conn():
     global db
     if not db:
-        path = os.path.expanduser("~/.local/share/ctf-cord/data.fs")
+        path = os.path.expanduser("~/.local/share/ctf-cord/")
         if not os.path.exists(path):
             os.mkdir(path)
         db = ZODB.DB(os.path.join(path, "data.fs"))
@@ -34,5 +33,5 @@ def get_conn():
             root = tx.root()
             if "ctfs" not in root:
                 # {unsigned 64: Ctf}
-                root.ctfs = BTrees.QOBTree.BTree()
+                root.ctfs = BTrees.QOBTree.BTree() # type: ignore
     return db
