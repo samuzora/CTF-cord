@@ -1,11 +1,13 @@
 from datetime import datetime
 import json
 import secrets
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import discord
+from discord.utils import format_dt
 import regex
 import requests
+
 
 class TempEventInfo(TypedDict):
     id: int
@@ -15,6 +17,7 @@ class TempEventInfo(TypedDict):
     logo: str
     start: str
     finish: str
+
 
 class EventInfo(TypedDict):
     id: int
@@ -28,7 +31,7 @@ class EventInfo(TypedDict):
 
 
 # --- get CTF details ---
-async def get_details(ctftime_link: str) -> EventInfo | bool:
+async def get_details(ctftime_link: str) -> EventInfo | Literal[False]:
     # Check whether the link is valid
     check = regex.search("[0-9]+", ctftime_link)
     if check is None:
@@ -53,7 +56,9 @@ async def get_details(ctftime_link: str) -> EventInfo | bool:
     event_info: EventInfo = {
         "id": temp_event_info["id"],
         "title": temp_event_info["title"],
-        "description": temp_event_info["description"] if len(temp_event_info["description"]) <= 1000 else temp_event_info["description"][:997] + "...",
+        "description": temp_event_info["description"]
+        if len(temp_event_info["description"]) <= 1000
+        else temp_event_info["description"][:997] + "...",
         "url": temp_event_info["url"],
         "logo": temp_event_info["logo"],
         "start": datetime.fromisoformat(temp_event_info["start"]),
@@ -82,11 +87,11 @@ async def details_to_embed(event_info: EventInfo) -> discord.Embed:
     embed.set_thumbnail(url=event_info["logo"])
     embed.add_field(
         name="Starts at",
-        value=discord.utils.format_dt(event_info["start"]),
+        value=format_dt(event_info["start"]),
     )
     embed.add_field(
         name="Ends at",
-        value=discord.utils.format_dt(event_info["finish"]),
+        value=format_dt(event_info["finish"]),
     )
     embed.add_field(
         name="CTFtime",
@@ -107,20 +112,23 @@ async def generate_creds() -> str:
 
 
 # --- create Discord channel ---
-async def create_channel(ctx: discord.ApplicationContext, event_info: EventInfo) -> discord.TextChannel:
+async def create_channel(ctx: discord.ApplicationContext, event_info: EventInfo) -> discord.TextChannel | None:
     # create channel and assign perms
-    perms = {
-        ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        ctx.guild.me: discord.PermissionOverwrite(view_channel=True),
-        # don't add the author - react to the message to join
-        # ctx.author: discord.PermissionOverwrite(view_channel=True),
-    }
+    if ctx.guild:
+        perms = {
+            ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            ctx.guild.me: discord.PermissionOverwrite(view_channel=True),
+            # don't add the author - react to the message to join
+            # ctx.author: discord.PermissionOverwrite(view_channel=True),
+        }
 
-    # Create channel
-    ctf_channel = await ctx.guild.create_text_channel(
-        event_info["title"],
-        topic=event_info["url"],
-        overwrites=perms,
-    )
+        # Create channel
+        ctf_channel = await ctx.guild.create_text_channel(
+            event_info["title"],
+            topic=event_info["url"],
+            overwrites=perms,
+        )
 
-    return ctf_channel
+        return ctf_channel if ctf_channel else None
+    else:
+        return None

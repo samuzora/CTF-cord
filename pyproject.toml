@@ -8,3 +8,7 @@ authors = [
 readme = "README.md"
 license = {text = "MIT"}
 
+[mypy]
+files = [
+    "src/**/*.py",
+]

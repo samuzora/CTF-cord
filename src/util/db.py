@@ -16,8 +16,9 @@ class Ctf(Persistent):
 
 
 class Challenge(Persistent):
-    def __init__(self, name: str, solved_by: int):
+    def __init__(self, name: str, worked_on: int, solved_by: int):
         self.name: str = name
+        self.worked_on: int = worked_on
         self.solved_by: int = solved_by
 
 
@@ -33,5 +34,5 @@ def get_conn():
             root = tx.root()
             if not hasattr(root, "ctfs"):
                 # {unsigned 64: Ctf}
-                root.ctfs = BTrees.QOBTree.BTree() # type: ignore
+                root.ctfs = BTrees.QOBTree.BTree()  # type: ignore
     return db

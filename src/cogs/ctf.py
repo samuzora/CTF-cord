@@ -70,14 +70,9 @@ class CTF(commands.Cog):
 
     # --- /ctf register ---
     @ctf_group.command(description="Register for an upcoming CTF.")
-    async def register(
-        self,
-        ctx,
-        team_name: discord.Option(str, "Your team name for this CTF"), # type: ignore
-        ctftime_link: discord.Option( # type: ignore
-            str, "CTFtime link of CTF, can also be the 4-digit ID of the CTF."
-        ),
-    ):
+    @discord.option(name="team_name", type=str, description="Your team name")
+    @discord.option(name="ctftime_link", type=str, description="CTFtime link of CTF")
+    async def register(self, ctx, team_name: str, ctftime_link: str):
         # get ctf details
         event_info = await util.ctf.get_details(ctftime_link)
         if event_info is False:
@@ -96,6 +91,7 @@ class CTF(commands.Cog):
             root = tx.root()
 
             channel = await util.ctf.create_channel(ctx, event_info)
+            assert channel is not None
 
             embed = await util.ctf.details_to_embed(event_info)
             join_interaction = await ctx.respond(embed=embed)
