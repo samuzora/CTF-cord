@@ -16,11 +16,15 @@ class Ctf(Persistent):
 
 
 class Challenge(Persistent):
-    def __init__(self, name: str, worked_on: int, solved_by: int):
+    def __init__(self, name: str, worked_on: int):
         self.name: str = name
         self.worked_on: int = worked_on
-        self.solved_by: int = solved_by
+        self.solved_by: int = 0
+        self.flag: str = ""
 
+    def solve(self, solved_by: int, flag: str):
+        self.solved_by = solved_by
+        self.flag = flag
 
 def get_conn():
     global db

@@ -22,10 +22,12 @@ class Chall(commands.Cog):
     )
 
     @chall_group.command(description="Add a challenge")
+    @discord.option("member", type=discord.Member, description="Member working on challenge", default=None)
     async def workon(
         self,
         ctx: discord.ApplicationContext,
         name: str,
+        member: discord.Member | None,
     ):
         with self.db.transaction() as tx:
             root = tx.root()
@@ -38,17 +40,18 @@ class Chall(commands.Cog):
                 await ctx.respond("Challenge already added", ephemeral=True)
                 return
 
-            chall = Challenge(name=name, worked_on=ctx.author.id, solved_by=0)
+            worked_on = member.id if member else ctx.author.id
+            chall = Challenge(name=name, worked_on=worked_on)
 
             root.ctfs[ctx.channel_id].challenges.append(chall)
-            await ctx.respond(f"{ctx.author.mention} is working on {name}")
+            await ctx.respond(f"<@{worked_on}> is working on {name}")
 
     @chall_group.command(description="Solve challenge")
     async def solve(
         self,
         ctx: discord.ApplicationContext,
         name: str,
-        solved_by: discord.Member,
+        flag: str,
     ):
         with self.db.transaction() as tx:
             root = tx.root()
@@ -61,13 +64,13 @@ class Chall(commands.Cog):
             chall = next((c for c in ctf.challenges if c.name == name), None)
             if not chall:
                 workon_id = ctx.author.id
-                chall = Challenge(name=name, worked_on=workon_id, solved_by=solved_by.id)
+                chall = Challenge(name=name, worked_on=workon_id)
+                chall.solve(solved_by=workon_id, flag=flag)
                 ctf.challenges.append(chall)
             else:
-                workon_id = chall.worked_on
+                chall.solve(solved_by=chall.worked_on, flag=flag)
 
-            chall.solved_by = solved_by.id
-            await ctx.respond(f"Challenge {name} solved by {solved_by.mention}!")
+            await ctx.respond(f"Challenge {name} solved by <@{chall.solved_by}>!")
 
     @chall_group.command(description="List challenges")
     async def list(self, ctx: discord.ApplicationContext):
@@ -81,7 +84,7 @@ class Chall(commands.Cog):
             challs = ""
             for c in ctf.challenges:
                 if c.solved_by:
-                    challs += f"- {c.name} (solved by <@{c.solved_by}>)\n"
+                    challs += f"- {c.name}: `{c.flag}` (solved by <@{c.solved_by}>)\n"
                 else:
                     challs += f"- {c.name} (<@{c.worked_on}> is working on)\n"
             embed = discord.Embed(title="Challenges", description=challs)
