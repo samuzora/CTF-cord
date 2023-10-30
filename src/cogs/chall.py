@@ -1,7 +1,7 @@
 from typing import Literal
 import discord
 from discord.commands import SlashCommandGroup
-from discord.ext import commands
+from discord.ext import commands, pages
 
 from util.db import get_conn, Challenge
 
@@ -81,14 +81,19 @@ class Chall(commands.Cog):
                 await ctx.respond("Channel not found", ephemeral=True)
                 return
 
-            challs = ""
+            challs = [""]
+            page = 0
             for c in ctf.challenges:
+                if len(challs[page]) > 3000:
+                    page += 1
+                    challs[page] = ""
                 if c.solved_by:
-                    challs += f"- {c.name}: `{c.flag}` (solved by <@{c.solved_by}>)\n"
+                    challs[page] += f"- {c.name}: `{c.flag}` (solved by <@{c.solved_by}>)\n"
                 else:
-                    challs += f"- {c.name} (<@{c.worked_on}> is working on)\n"
-            embed = discord.Embed(title="Challenges", description=challs)
-            await ctx.respond(embed=embed)
+                    challs[page] += f"- {c.name} (<@{c.worked_on}> is working on)\n"
+
+            paginator = pages.Paginator(pages=[discord.Embed(title="Challenges", description=c) for c in challs])
+            await paginator.respond(ctx.interaction, ephemeral=False)
 
 def setup(bot):
     bot.add_cog(Chall(bot))
