@@ -23,13 +23,13 @@ A Discord bot for all your CTF management needs.
 
 Dependencies:
 
-- `pipenv`: Package manager and runner
-- `pyenv`: Python version manager
-- `nohup`: Run in background
+- `docker`
+- `docker-compose`
+- `docker-buildx-plugin`
 
 ```bash
 git clone https://github.com/samuzora/CTF-cord
 cd ./CTF-cord/
-pipenv sync
-./deploy.sh
+vim .env # Fill in the environment variables
+DOCKER_BUILDKIT=1 docker-compose up --build -d
 ```
