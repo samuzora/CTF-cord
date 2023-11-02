@@ -1,8 +1,8 @@
 .env
-src/data/
+data/
 nohup.out
 
 .mypy_cache/
 .ruff_cache/
 .venv/
-*/__pycache__/
+**/__pycache__/

@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
 import discord
+from discord import guild_only
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
+from sqlalchemy import select
 
 import util.ctf
 from util.db import get_conn, Ctf
@@ -15,7 +17,6 @@ class CTF(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.db = get_conn()
 
     # --- slash command group ---
     ctf_group = SlashCommandGroup(
@@ -26,45 +27,39 @@ class CTF(commands.Cog):
 
     # --- add user to channel ---
     @commands.Cog.listener()
+    @guild_only()
     async def on_raw_reaction_add(self, reaction: discord.RawReactionActionEvent):
         user = self.bot.get_user(reaction.user_id)
         if user.bot:
             return
 
-        with self.db.transaction() as tx:
-            root = tx.root()
-            ctf = next(
-                (x for x in root.ctfs.values() if x.join_message_id == reaction.message_id),
-                None,
-            )
+        with get_conn() as conn:
+            ctf = conn.scalar(select(Ctf).where(Ctf.join_message_id == reaction.message_id))
             if ctf is None:
                 return
 
             channel = await self.bot.fetch_channel(ctf.channel_id)
             if channel is None:
-                root[str(reaction.message_id)] = None
+                conn.delete(ctf)
             else:
                 await channel.set_permissions(user, view_channel=True)
 
     # --- remove user from channel ---
     @commands.Cog.listener()
+    @guild_only()
     async def on_raw_reaction_remove(self, reaction: discord.RawReactionActionEvent):
         user = self.bot.get_user(reaction.user_id)
         if user.bot:
             return
 
-        with self.db.transaction() as tx:
-            root = tx.root()
-            ctf = next(
-                (x for x in root.ctfs.values() if x.join_message_id == reaction.message_id),
-                None,
-            )
+        with get_conn() as conn:
+            ctf = conn.scalar(select(Ctf).where(Ctf.join_message_id == reaction.message_id))
             if ctf is None:
                 return
 
             channel = await self.bot.fetch_channel(ctf.channel_id)
             if channel is None:
-                root[str(reaction.message_id)] = None
+                conn.delete(ctf)
             else:
                 await channel.set_permissions(user, view_channel=False)
 
@@ -72,7 +67,11 @@ class CTF(commands.Cog):
     @ctf_group.command(description="Register for an upcoming CTF.")
     @discord.option(name="team_name", type=str, description="Your team name")
     @discord.option(name="ctftime_link", type=str, description="CTFtime link of CTF")
-    async def register(self, ctx, team_name: str, ctftime_link: str):
+    @guild_only()
+    async def register(
+        self, ctx: discord.ApplicationContext,
+        team_name: str, ctftime_link: str
+   ):
         # get ctf details
         event_info = await util.ctf.get_details(ctftime_link)
         if event_info is False:
@@ -87,18 +86,20 @@ class CTF(commands.Cog):
             return
 
         # create text channel for CTF
-        with self.db.transaction() as tx:
-            root = tx.root()
-
+        with get_conn() as conn:
             channel = await util.ctf.create_channel(ctx, event_info)
-            assert channel is not None
+
+            if channel is None:
+                await ctx.respond("Error creating channel", ephemeral=True)
+                return
 
             embed = await util.ctf.details_to_embed(event_info)
-            join_interaction = await ctx.respond(embed=embed)
+            join_interaction = await ctx.send_response(embed=embed)
             join_msg = await join_interaction.original_response()
             await join_msg.add_reaction("✋")
 
-            root.ctfs[channel.id] = Ctf(channel.id, join_msg.id)
+            ctf = Ctf(channel_id=channel.id, join_message_id=join_msg.id)
+            conn.add(ctf)
 
             # edit embed to include creds
             password = await util.ctf.generate_creds()
@@ -108,6 +109,8 @@ class CTF(commands.Cog):
             )
             private_msg = await channel.send(embed=embed)
             await private_msg.pin()
+
+            conn.commit()
 
 
 # --- load cog ---

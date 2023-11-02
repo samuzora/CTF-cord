@@ -118,16 +118,25 @@ async def create_channel(ctx: discord.ApplicationContext, event_info: EventInfo)
         perms = {
             ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             ctx.guild.me: discord.PermissionOverwrite(view_channel=True),
-            # don't add the author - react to the message to join
+            # don't add the author - they should react to the message to join
             # ctx.author: discord.PermissionOverwrite(view_channel=True),
         }
 
         # Create channel
-        ctf_channel = await ctx.guild.create_text_channel(
-            event_info["title"],
-            topic=event_info["url"],
-            overwrites=perms,
-        )
+        category = ctx.interaction.channel.category if type(ctx.interaction.channel) == discord.TextChannel else None
+        ctf_channel: discord.TextChannel | None = None
+        if category:
+            ctf_channel = await category.create_text_channel(
+                event_info["title"],
+                topic=event_info["url"],
+                overwrites=perms,
+            )
+        else:
+            ctf_channel = await ctx.guild.create_text_channel(
+                event_info["title"],
+                topic=event_info["url"],
+                overwrites=perms,
+            )
 
         return ctf_channel if ctf_channel else None
     else:

@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: ./
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+    volumes:
+      - ./data/:/app/data

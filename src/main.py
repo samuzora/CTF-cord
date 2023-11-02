@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 
-token = os.environ.get("CTFCORD_BOT_TOKEN")
+token = os.environ.get("BOT_TOKEN")
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
 intents.members = True
@@ -23,7 +23,7 @@ bot = commands.Bot(
 async def on_ready():
     assert bot.user is not None
     await bot.user.edit(username="CTF-cord")
-    print("Bot is running")
+    logging.info("Bot is running")
 
 
 # Error handler
@@ -40,6 +40,5 @@ if __name__ == "__main__":
     bot.load_extension("cogs.ctf")
     bot.load_extension("cogs.dev")
     bot.load_extension("cogs.chall")
-    # bot.load_extension("cogs.dev")
     # bot.load_extension("cogs.settings")
     bot.run(token)

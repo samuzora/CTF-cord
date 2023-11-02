@@ -19,21 +19,21 @@ class Dev(commands.Cog):
     )
 
     @dev_group.command(description="Manually add a ctf channel")
+    @discord.option("channel_id", type=discord.SlashCommandOptionType.integer, description="Channel ID")
+    @discord.option("join_message_id", type=discord.SlashCommandOptionType.integer, description="Join message ID")
     async def add_channel(
         self,
         ctx: discord.ApplicationContext,
         channel_id: str,
         join_message_id: str,
     ):
-        __channel_id = int(channel_id)
-        __join_message_id = int(join_message_id)
         if not ctx.author.id == self.bot.owner_id:
-            return await ctx.respond("You are not allowed to do that", ephemeral=True)
-        with self.db.transaction() as tx:
-            root = tx.root()
-            ctf = Ctf(channel_id=__channel_id, join_message_id=__join_message_id)
-            root.ctfs[__channel_id] = ctf
-        await ctx.respond("Added ctf", ephemeral=True)
+            return await ctx.respond("Unauthorized", ephemeral=True)
+        with get_conn() as conn:
+            ctf = Ctf(channel_id=channel_id, join_message_id=join_message_id)
+            conn.add(ctf)
+            conn.commit()
+            await ctx.respond("Added ctf", ephemeral=True)
 
 
 def setup(bot):

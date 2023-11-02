@@ -8,7 +8,29 @@ authors = [
 readme = "README.md"
 license = {text = "MIT"}
 
-[mypy]
-files = [
-    "src/**/*.py",
-]
+[tool.poetry]
+name = "ctf-cord"
+version = "0.1.0"
+description = ""
+authors = ["samuzora <lucastanyj@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "*"
+regex = "*"
+py-cord = "*"
+zodb = "*"
+btrees = "*"
+sqlalchemy = "*"
+
+
+[tool.poetry.group.dev.dependencies]
+types-regex = "*"
+types-requests = "*"
+typing-extensions = "*"
+zodbbrowser = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
