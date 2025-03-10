@@ -27,6 +27,7 @@ class ctf(commands.Cog):
         guild_ids=[int(dev_guild)] if dev_guild else None,
     )
 
+    # TODO: rate limit this
     @commands.Cog.listener()
     @guild_only()
     async def on_raw_reaction_add(self, reaction: discord.RawReactionActionEvent):
@@ -43,9 +44,10 @@ class ctf(commands.Cog):
             if channel is None:
                 conn.delete(ctf)
             else:
-                await channel.set_permissions(user, view_channel=True)
                 await channel.send(f"{user.mention} is joining the channel")
+                await channel.set_permissions(user, view_channel=True)
 
+    # TODO: rate limit this
     @commands.Cog.listener()
     @guild_only()
     async def on_raw_reaction_remove(self, reaction: discord.RawReactionActionEvent):
