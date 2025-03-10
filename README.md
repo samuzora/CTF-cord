@@ -47,4 +47,12 @@ Permissions (17927193521232):
 
 ## Deployment
 
-Just set the BOT_TOKEN environment variable in a .env file, and run `docker compose up`
+Copy `.env.example` to `.env` and populate the required fields.
+
+- `BOT_TOKEN`: Your bot's token
+- `BOT_NAME`: The username of the bot
+- `DEV_GUILD`: Servers which you want to sync commands immediately to, for
+  development purposes
+
+Once `.env` is set up, run `docker compose up --build -d` and the bot should be
+up.
