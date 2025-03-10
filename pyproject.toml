@@ -1,36 +1,12 @@
 [project]
 name = "ctf-cord"
-version = ""
-description = ""
-authors = [
-    {name = "samuzora", email = "lucastanyj@gmail.com"},
-]
-readme = "README.md"
-license = {text = "MIT"}
-
-[tool.poetry]
-name = "ctf-cord"
 version = "0.1.0"
-description = ""
-authors = ["samuzora <lucastanyj@gmail.com>"]
+description = "Add your description here"
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-requests = "*"
-regex = "*"
-py-cord = "*"
-zodb = "*"
-btrees = "*"
-sqlalchemy = "*"
-
-
-[tool.poetry.group.dev.dependencies]
-types-regex = "*"
-types-requests = "*"
-typing-extensions = "*"
-zodbbrowser = "*"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires-python = ">=3.12"
+dependencies = [
+    "py-cord>=2.6.1",
+    "regex>=2024.11.6",
+    "requests>=2.32.3",
+    "sqlalchemy>=2.0.38",
+]
