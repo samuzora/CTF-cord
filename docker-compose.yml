@@ -3,6 +3,8 @@ services:
     build: ./
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_NAME=${BOT_NAME}
+      - DEV_GUILD=${DEV_GUILD}
     volumes:
       - ./data/:/app/data
     restart: always
