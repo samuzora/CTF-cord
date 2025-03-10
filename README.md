@@ -21,13 +21,17 @@ For privacy purposes, you should host an instance of the bot for your own
 team. You can create a Discord application from the Discord developer console,
 and create an invite with the required permissions to add it to your server.
 
-## Required permissions and scopes
+## Required intents, permissions and scopes
+
+Intents:
+
+`members`
 
 Scope:
 
 `bot`, `applications.commands`
 
-Permissions:
+Permissions (17927193521232):
 
 - `Manage channels`
 - `View channels`
