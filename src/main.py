@@ -75,9 +75,9 @@ async def help(ctx: discord.ApplicationContext):
             value += "\n\n"
 
             value += f"{ctf_add.mention}\n"
-            value += "Create a private channel which participating members can opt-in to join, and a scheduled Discord \
-            event based on the start and end time stated in CTFtime. Auto-generated credentials will be provided in \
-            the private channel. Can only be invoked on CTFs that are not yet over."
+            value += ("Create a private channel which participating members can opt-in to join, and a scheduled "
+            "Discord event based on the start and end time stated in CTFtime. Auto-generated credentials will be "
+            "provided in the private channel. Can only be invoked on CTFs that are not yet over.")
         else:
             chall_cog = ctx.bot.get_cog("chall")
             assert chall_cog is not None
@@ -97,15 +97,15 @@ async def help(ctx: discord.ApplicationContext):
             value += "\n\n"
 
             value += f"{chall_add.mention}\n"
-            value += "Indicate yourself as working on a new challenge, and create a thread for it. If the challenge \
-            has already been added, the `category` parameter can be omitted, and you will be added to the list of \
-            people working on the challenge."
+            value += ("Indicate yourself as working on a new challenge, and create a thread for it. If the challenge "
+            "has already been added, the `category` parameter can be omitted, and you will be added to the list of "
+            "people working on the challenge.")
             value += "\n\n"
 
             value += f"{chall_solve.mention}\n"
-            value += "Mark a challenge as solved. If the challenge has already been solved, you will be added to the \
-            list of people who solved the challenge. If invoked in the challenge's thread, the `name` parameter is \
-            optional. If the challenge has not been added before, the `category` parameter is required."
+            value += ("Mark a challenge as solved. If the challenge has already been solved, you will be added to the "
+            "list of people who solved the challenge. If invoked in the challenge's thread, the `name` parameter is "
+            "optional. If the challenge has not been added before, the `category` parameter is required.")
             value += "\n\n"
 
             value += f"{chall_lst.mention}\n"
