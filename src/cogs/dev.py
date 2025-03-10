@@ -1,11 +1,13 @@
+import os
 import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
 from util.db import get_conn, Ctf
 
+dev_guild = os.environ.get("DEV_GUILD", None)
 
-class Dev(commands.Cog):
+class dev(commands.Cog):
     """
     Dev commands
     """
@@ -15,7 +17,7 @@ class Dev(commands.Cog):
         self.db = get_conn()
 
     dev_group = SlashCommandGroup(
-        "dev", "Dev commands", guild_ids=[946756291559301151, 801425873017503756, 877477283655450654]
+        "dev", "Dev commands", guild_ids=[int(dev_guild)] if dev_guild else None
     )
 
     @dev_group.command(description="Manually add a ctf channel")
@@ -37,4 +39,4 @@ class Dev(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Dev(bot))
+    bot.add_cog(dev(bot))

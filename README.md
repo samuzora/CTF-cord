@@ -1,35 +1,46 @@
-# CTF-cord
+# CTF-cord v2
 
 A Discord bot for all your CTF management needs. 
 
 ## Features
 
-* CTF details pulled from CTFtime and converted into an embed
-* Private channels
+* CTF details scraped from CTFtime
+* Private channels with reaction-based permission management
+- Scheduled events
+- Creation of challenge threads
 
-[Add it to your server!](https://discord.com/api/oauth2/authorize?client_id=934122115366547526&permissions=541434768464&scope=bot%20applications.commands)
+## Limitations
 
-## Documentation
+The server owner can always see the channel even when not opting-in, due to
+having administrator privileges. If this is an issue, server ownership can be
+transferred to a non-participating third-party.
 
-### /ctf
+## Data privacy
 
-#### `/ctf register <team_name> <ctftime_link>`
+For privacy purposes, you should host an instance of the bot for your own
+team. You can create a Discord application from the Discord developer console,
+and create an invite with the required permissions to add it to your server.
 
-* `team_name: str`
-* `ctftime_link: str`
-	* Link to the CTF on CTFtime, can also be the 4-digit ID of the CTF (the last 4 digits in the CTFtime link)
+## Required permissions and scopes
 
-## Installation
+Scope:
 
-Dependencies:
+`bot`, `applications.commands`
 
-- `docker`
-- `docker-compose`
-- `docker-buildx-plugin`
+Permissions:
 
-```bash
-git clone https://github.com/samuzora/CTF-cord
-cd ./CTF-cord/
-vim .env # Fill in the environment variables
-DOCKER_BUILDKIT=1 docker-compose up --build -d
-```
+- `Manage channels`
+- `View channels`
+- `Manage events`
+- `Create events`
+- `Send messages`
+- `Create public threads`
+- `Send messages in threads`
+- `Manage messages`
+- `Manage threads`
+- `Embed links`
+- `Add reactions`
+
+## Deployment
+
+Just set the BOT_TOKEN environment variable in a .env file, and run `docker compose up`

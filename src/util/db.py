@@ -9,15 +9,8 @@ engine = None
 
 Base = declarative_base()
 
-chall_to_worked_on = Table(
-    "chall_to_worked_on",
-    Base.metadata,
-    Column("Challenge", ForeignKey("challenges.id"), primary_key=True),
-    Column("User", ForeignKey("users.id"), primary_key=True)
-)
-
-chall_to_solved_by = Table(
-    "chall_to_solved_by",
+chall_to_members = Table(
+    "chall_to_members",
     Base.metadata,
     Column("Challenge", ForeignKey("challenges.id"), primary_key=True),
     Column("User", ForeignKey("users.id"), primary_key=True)
@@ -34,26 +27,25 @@ class Challenge(Base):
     __tablename__ = "challenges"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String)
+    category: Mapped[str] = mapped_column(String)
     ctf_id: Mapped[int] = mapped_column(Integer, ForeignKey("ctfs.id"))
     ctf: Mapped["Ctf"] = relationship("Ctf", back_populates="challenges")
-    worked_on: Mapped[List["User"]]= relationship(secondary=chall_to_worked_on, back_populates="worked_on")
+    members: Mapped[List["User"]]= relationship(secondary=chall_to_members, back_populates="challenges")
     solved: Mapped[bool] = mapped_column(Boolean, default=False)
-    flag: Mapped[str] = mapped_column(String, nullable=True)
-    solved_by: Mapped[List["User"]]= relationship(secondary=chall_to_solved_by, back_populates="solved")
+    thread_id: Mapped[int] = mapped_column(Integer)
 
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True) # discord user id
-    worked_on: Mapped[List["Challenge"]] = relationship(secondary=chall_to_worked_on, back_populates="worked_on")
-    solved: Mapped[List["Challenge"]] = relationship(secondary=chall_to_solved_by, back_populates="solved_by")
+    challenges: Mapped[List["Challenge"]] = relationship(secondary=chall_to_members, back_populates="members")
 
 def get_conn():
     global engine
     if not engine:
-        path = "/app/data"
+        path = "data"
         if not os.path.exists(path):
             os.mkdir(path)
-        engine = create_engine(f"sqlite://{os.path.join(path, 'data.db')}")
+        engine = create_engine(f"sqlite:///{os.path.join(path, 'data.db')}")
         Base.metadata.create_all(engine)
     return Session(engine)
 

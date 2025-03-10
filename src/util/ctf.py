@@ -103,7 +103,6 @@ async def details_to_embed(event_info: EventInfo) -> discord.Embed:
             name="Discord Server",
             value=f"<{event_info['discord_inv']}>",
         )
-    embed.set_footer(text="React with ✋ to join the channel.")
     return embed
 
 
@@ -111,9 +110,8 @@ async def generate_creds() -> str:
     return secrets.token_urlsafe(20)
 
 
-# --- create Discord channel ---
 async def create_channel(ctx: discord.ApplicationContext, event_info: EventInfo) -> discord.TextChannel | None:
-    # create channel and assign perms
+    # define perms
     if ctx.guild:
         perms = {
             ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -122,7 +120,7 @@ async def create_channel(ctx: discord.ApplicationContext, event_info: EventInfo)
             # ctx.author: discord.PermissionOverwrite(view_channel=True),
         }
 
-        # Create channel
+        # create channel
         category = ctx.interaction.channel.category if type(ctx.interaction.channel) == discord.TextChannel else None
         ctf_channel: discord.TextChannel | None = None
         if category:

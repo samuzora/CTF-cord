@@ -1,15 +1,18 @@
-import logging
-from typing import Literal
+import os
+import random
+
 import discord
 from discord import guild_only
 from discord.commands import SlashCommandGroup
-from discord.ext import commands, pages
-from sqlalchemy import and_, func, insert, select, update
+from discord.ext import commands
+from sqlalchemy import and_, select
 
+from util.chall import get_challenge_paginator
 from util.db import Ctf, User, get_all_challs_from_ctx, get_conn, Challenge, get_unsolved_challs_from_ctx
 
+dev_guild = os.environ.get("BOT_DEV_GUILD", None)
 
-class Chall(commands.Cog):
+class chall(commands.Cog):
     """
     Commands related to challenges
     """
@@ -20,87 +23,87 @@ class Chall(commands.Cog):
     chall_group = SlashCommandGroup(
         "chall",
         "Commands related to challenges",
-        guild_ids=[946756291559301151, 801425873017503756, 877477283655450654],
+        guild_ids=[int(dev_guild)] if dev_guild else None,
     )
 
-    @chall_group.command(description="Add members working on a challenge")
-    @discord.option("member", type=discord.Member, description="Person working on challenge", default=None)
-    @discord.option("overwrite", type=discord.SlashCommandOptionType.boolean, description="Replace all users working on the challenge with the specified member", default=False)
+    @chall_group.command(description="Add a new challenge, or work with someone else on an existing challenge")
+    @discord.option("name", type=str, description="Challenge name")
+    @discord.option(
+        "category", type=str, description="Challenge category (required when adding new challenge)", default=None
+    )
     @guild_only()
-    async def workon(
+    async def add(
         self,
         ctx: discord.ApplicationContext,
         name: str,
-        member: discord.Member | None,
-        overwrite: bool = False,
+        category: str | None,
     ):
         with get_conn() as conn:
-            ctf = conn.scalar(
-                select(Ctf)
-                .where(Ctf.channel_id == ctx.channel_id)
-            )
+            ctf = conn.scalar(select(Ctf).where(Ctf.channel_id == ctx.channel_id))
             if not ctf:
-                return await ctx.respond("Channel not found", ephemeral=True)
+                return await ctx.respond("Invalid channel!", ephemeral=True)
 
             challenge = conn.scalar(
-                select(Challenge)
-                .join(Ctf)
-                .where(and_(
-                    Challenge.name == name, 
-                    Ctf.channel_id == ctx.channel_id
-                ))
+                select(Challenge).join(Ctf).where(and_(Challenge.name == name, Ctf.channel_id == ctx.channel_id))
             )
 
             if challenge:
                 if challenge.solved:
                     return await ctx.respond("Challenge already solved", ephemeral=True)
 
-                # check if challenge.worked_on is unchanged 
+                # check if challenge.members is unchanged
                 # if unchanged, inform the user that the challenge is already added
-                # if changed, append the user to workon (if overwrite then replace)
-                member_id = member.id if member else ctx.author.id
-                user = conn.scalar(
-                    select(User).where(User.id == member_id)
-                )
+                # if changed, append the user to workon
+                user = conn.scalar(select(User).where(User.id == ctx.author.id))
                 if not user:
-                    user = User(id=member_id)
+                    user = User(id=ctx.author.id)
                     conn.add(user)
 
-                if overwrite:
-                    # overwrite worked_on
-                    challenge.worked_on = [user]
-                    conn.commit()
-                    return await ctx.respond(f"<@{member_id}> is working on `{name}`")
-                elif member_id not in [user.id for user in challenge.worked_on]:
-                    # append to worked_on
-                    user = conn.scalar(
-                        select(User).where(User.id == member_id)
-                    )
+                if ctx.author.id not in [user.id for user in challenge.members]:
+                    # add to thread if thread exists
+                    thread = ctx.bot.get_channel(challenge.thread_id)
+                    if thread and type(thread) is discord.Thread:
+                        await thread.add_user(ctx.author)
+
+                    # append to members list
+                    user = conn.scalar(select(User).where(User.id == ctx.author.id))
                     if not user:
-                        user = User(id=member_id)
+                        user = User(id=ctx.author.id)
                         conn.add(user)
-                    old_worked_on = challenge.worked_on[:] # pass by value
-                    challenge.worked_on.append(user)
+                    old_members_list = challenge.members[:]  # pass by value
+                    challenge.members.append(user)
                     conn.commit()
-                    return await ctx.respond(f"<@{member_id}> is working on `{name}` together with {', '.join([f'<@{user.id}>' for user in old_worked_on])}")
+                    user_list = "+".join([f"<@{user.id}>" for user in old_members_list])
+                    await ctx.send(f"{ctx.author.mention} is working on `{name}` together with {user_list}")
+
+                    paginator = await get_challenge_paginator(ctx, ctx.channel_id)
+                    return await paginator.respond(ctx.interaction)
 
                 # unchanged, return error
                 return await ctx.respond("Challenge already added", ephemeral=True)
             else:
-                member_id = member.id if member else ctx.author.id
-                user = conn.scalar(
-                    select(User).where(User.id == member_id)
-                )
+                if not category:
+                    await ctx.respond("Category required for new challenge", ephemeral=True)
+                    return
+
+                user = conn.scalar(select(User).where(User.id == ctx.author.id))
                 if not user:
-                    user = User(id=member_id)
+                    user = User(id=ctx.author.id)
                     conn.add(user)
 
-                challenge = Challenge(name=name, ctf=ctf, worked_on=[user])
+                _category = category.lower()
+
+                thread_name = f"{_category}/{name}"
+                message = await ctx.send(f"`{thread_name}`")
+                thread = await message.create_thread(name=thread_name)
+                await thread.add_user(ctx.author)
+
+                challenge = Challenge(name=name, category=_category, ctf=ctf, members=[user], thread_id=thread.id)
 
                 conn.add(challenge)
                 conn.commit()
-                await ctx.respond(f"<@{member_id}> is working on `{name}`")
 
+                return await ctx.respond(f"Challenge `{_category}/{name}` added", ephemeral=True)
 
     @chall_group.command(desription="Remove a challenge")
     @discord.option("name", type=str, autocomplete=get_all_challs_from_ctx)
@@ -111,96 +114,145 @@ class Chall(commands.Cog):
         name: str,
     ):
         with get_conn() as conn:
+            if type(ctx.channel) is discord.Thread:
+                channel = ctx.channel.parent
+            else:
+                channel = ctx.channel
+            if type(channel) is not discord.TextChannel:
+                return await ctx.respond("Invalid channel!")
+
             challenge = conn.scalar(
                 select(Challenge)
                 .join(Challenge.ctf)
                 .where(Challenge.name == name)
-                .where(Ctf.channel_id == ctx.channel_id)
+                .where(Ctf.channel_id == channel.id)
             )
             if not challenge:
-                return await ctx.respond("Challenge not found", ephemeral=True)
+                return await ctx.respond(f"Challenge `{name}` not found", ephemeral=True)
+
+            thread = ctx.bot.get_channel(challenge.thread_id)
+            if thread and type(thread) == discord.Thread:
+                await thread.delete()
 
             conn.delete(challenge)
             conn.commit()
-            await ctx.respond(f"Challenge {challenge.name} removed")
+            await ctx.respond(f"Challenge `{challenge.name}` removed", ephemeral=True)
 
-    @chall_group.command(description="Solve challenge")
-    @discord.option("name", type=str, autocomplete=get_unsolved_challs_from_ctx)
-    @discord.option("member", type=discord.Member, description="Person who solved the challenge", default=None)
-    @discord.option("overwrite", type=discord.SlashCommandOptionType.boolean, description="Replace all users working on the challenge with the specified member", default=False)
+            paginator = await get_challenge_paginator(ctx, ctf)
+            return await paginator.respond(ctx.interaction, target=channel)
+
+    @chall_group.command(description="Mark challenge as solved, or add yourself to the list of solvers")
+    @discord.option(
+        "name",
+        type=str,
+        autocomplete=get_unsolved_challs_from_ctx,
+        description="Challenge name (if unspecified, inferred from the current challenge thread)",
+        default=None,
+    )
+    @discord.option(
+        "category", type=str, description="Category (required for new challenge, else ignored)", default=None
+    )
     @guild_only()
     async def solve(
         self,
         ctx: discord.ApplicationContext,
-        name: str,
-        flag: str,
-        member: discord.Member | None,
-        overwrite: bool = False,
+        name: str | None,
+        category: str | None,
     ):
         with get_conn() as conn:
-            ctf = conn.scalar(
-                select(Ctf)
-                .where(Ctf.channel_id == ctx.channel_id)
-           )
-            if not ctf:
-                return await ctx.respond("Channel not found", ephemeral=True)
+            if type(ctx.channel) is discord.Thread:
+                channel = ctx.channel.parent
+                thread = ctx.channel
+            elif type(ctx.channel) is discord.TextChannel:
+                channel = ctx.channel
+                thread = None
+            else:
+                return await ctx.respond("Invalid channel!", ephemeral=True)
+            if type(channel) is not discord.TextChannel:
+                return await ctx.respond("Invalid channel!")
 
-            member_id = member.id if member else ctx.author.id
-            user = conn.scalar(
-                select(User).where(User.id == member_id)
-            )
+            ctf = conn.scalar(select(Ctf).where(Ctf.channel_id == channel.id))
+            if not ctf:
+                return await ctx.respond("Invalid channel!", ephemeral=True)
+
+            user = conn.scalar(select(User).where(User.id == ctx.author.id))
             if not user:
-                user = User(id=member_id)
+                user = User(id=ctx.author.id)
                 conn.add(user)
 
-            challenge = conn.scalar(
-                select(Challenge)
-                .join(Ctf)
-                .where(Challenge.name == name)
-                .where(Ctf.channel_id == ctx.channel_id)
-            )
-            if not challenge:
-                challenge = Challenge(name=name, worked_on=[user], ctf=ctf)
-                conn.add(challenge)
-            if overwrite:
-                challenge.solved_by = [user]
+            if name:
+                challenge = conn.scalar(
+                    select(Challenge).join(Ctf).where(Challenge.name == name).where(Ctf.channel_id == ctx.channel_id)
+                )
+            elif thread is not None:
+                challenge = conn.scalar(
+                    select(Challenge)
+                    .join(Ctf)
+                    .where(Challenge.thread_id == thread.id)
+                    .where(Ctf.channel_id == channel.id)
+                )
             else:
-                challenge.solved_by = list(set([*challenge.worked_on, user])) # uniq
-            challenge.solved = True
-            challenge.flag = flag
-            conn.commit()
+                return await ctx.respond(
+                    "Challenge name required since command not invoked from challenge thread", ephemeral=True
+                )
 
-            await ctx.respond(f"Challenge `{name}` solved by {', '.join([f'<@{user.id}>' for user in challenge.solved_by])}!")
+            if not challenge:
+                if not category:
+                    return await ctx.respond("Category required for new challenge", ephemeral=True)
+                challenge = Challenge(name=name, members=[user], ctf=ctf, category=category.lower(), thread_id=0)
+                conn.add(challenge)
+            elif not challenge.solved:
+                thread = ctx.bot.get_channel(challenge.thread_id)
+                if thread and type(thread) is discord.Thread:
+                    await thread.edit(name=f"{challenge.category}/{challenge.name} [SOLVED]")
 
+                challenge.solved_by = list(set(challenge.members + [user])) # uniq
+                challenge.solved = True
+                conn.commit()
+
+                emoji = random.choice([":partying_face:", ":fire:", ":tada:", ":confetti_ball:"])
+                user_list = "+".join([f"<@{user.id}>" for user in challenge.solved_by])
+                content = f"{emoji * 3} {user_list} solved `{challenge.category}/{challenge.name}`!"
+                await ctx.send(content)
+                # send the same message in the main ctf channel if currently in thread
+                if thread is not None and type(channel) is discord.TextChannel:
+                    await channel.send(content)
+
+                # whether in thread or main channel, always send the chall list to the main channel
+                paginator = await get_challenge_paginator(ctx, ctf)
+                return await paginator.respond(ctx.interaction, target=channel)
+            else:
+                if user.id not in challenge.solved_by:
+                    challenge.solved_by = challenge.solved_by + [user]
+                    conn.commit()
+
+                    emoji = random.choice([":partying_face:", ":fire:", ":tada:", ":confetti_ball:"])
+
+                    user_list = "+".join([f"<@{user.id}>" for user in challenge.solved_by])
+                    await ctx.send(f"{emoji * 3} {user_list} solved `{challenge.category}/{challenge.name}`!")
+                    paginator = await get_challenge_paginator(ctx, channel.id)
+                    return await paginator.respond(ctx.interaction, target=channel)
+                else:
+                    return await ctx.respond("You have already solved this challenge!", ephemeral=True)
 
     @chall_group.command(description="List challenges")
     @guild_only()
     async def list(self, ctx: discord.ApplicationContext):
         with get_conn() as conn:
-            ctf = conn.scalar(
-                select(Ctf)
-                .where(Ctf.channel_id == ctx.channel_id)
-            )
+            if type(ctx.channel) is discord.Thread:
+                channel = ctx.channel.parent
+            else:
+                channel = ctx.channel
+            if type(channel) is not discord.TextChannel:
+                return await ctx.respond("Invalid channel!", ephemeral=True)
+
+            ctf = conn.scalar(select(Ctf).where(Ctf.channel_id == channel.id))
             if not ctf:
-                return await ctx.respond("Channel not found", ephemeral=True)
+                return await ctx.respond("Invalid channel!", ephemeral=True)
 
-            out: list[str] = [""]
-            count = 0
-            index = 0
-            for c in ctf.challenges:
-                count += 1
-                if len(out[index]) > 3000:
-                    index += 1
-                    out.append("")
-
-                if c.solved_by:
-                    out[index] += f"{count}. {c.name}: `{c.flag}` (solved by {', '.join([f'<@{user.id}>' for user in c.solved_by])})\n"
-                else:
-                    out[index] += f"{count}. {c.name} ({', '.join([f'<@{user.id}>' for user in c.worked_on])} is working on)\n"
-
-            paginator = pages.Paginator(pages=[discord.Embed(title="Challenges", description=c) for c in out])
-            await paginator.respond(ctx.interaction, ephemeral=False)
+            paginator = await get_challenge_paginator(ctx, channel.id)
+            await paginator.respond(ctx.interaction)
 
 
 def setup(bot):
-    bot.add_cog(Chall(bot))
+    bot.add_cog(chall(bot))
