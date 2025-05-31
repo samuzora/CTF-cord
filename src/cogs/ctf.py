@@ -1,10 +1,12 @@
+from dateutil import parser
 from datetime import datetime, timezone, timedelta
+import pytz
 import os
 
 import discord
 from discord import guild_only
 from discord.commands import SlashCommandGroup
-from discord.ext import commands
+from discord.ext import commands, tasks
 from sqlalchemy import select
 
 import util.ctf
@@ -12,11 +14,20 @@ from util.db import get_conn, Ctf
 
 dev_guild = os.environ.get("DEV_GUILD", None)
 
+class HumanReadableTime_to_Datetime(commands.Converter):
+    async def convert(self, ctx, argument):
+        date = parser.parse(argument)
+        tz = pytz.timezone("Asia/Singapore")
+        return tz.localize(date, is_dst=None)
+
+
 
 class ctf(commands.Cog):
     """
     Commands related to CTFs.
     """
+
+    timers = []
 
     def __init__(self, bot):
         self.bot = bot
@@ -150,5 +161,48 @@ class ctf(commands.Cog):
             conn.commit()
 
 
+    @tasks.loop(seconds=1)
+    async def timecheck_task(self):
+        interval = timedelta(minutes=30)
+        print(self.timers)
+
+        self.timers = [i for i in self.timers if not i["expired"]]
+
+        tz = pytz.timezone("Asia/Singapore")
+        for event in self.timers:
+            now = datetime.now(tz)
+
+            if now >= event["end"]:
+                await event["channel"].send("CTF has ended!")
+                event["expired"] = True
+                continue
+            elif now >= event["start"] and event["last_pinged"] and now - event["last_pinged"] >= interval:
+                event["last_pinged"] = now
+                await event["channel"].send(f"CTF ends <t:{int(event["end"].timestamp())}:R>")
+                continue
+            # elif now >= event["start"] and event["last_pinged"] <= event["start"]:
+            #     await event["channel"].send("CTF has started")
+            #     continue
+
+
+    @ctf_group.command(description="Set a recurring time check for an ongoing event.")
+    async def timecheck(
+        self, ctx: discord.ApplicationContext,
+        start_time: HumanReadableTime_to_Datetime,
+        end_time: HumanReadableTime_to_Datetime,
+    ):
+        tz = pytz.timezone("Asia/Singapore")
+        self.timers.append({
+            "start": start_time,
+            "end": end_time,
+            "channel": ctx.channel,
+            "expired": False,
+            "last_pinged": datetime.now(tz)
+        })
+        return await ctx.respond("Time check added", ephemeral=True)
+
+
 def setup(bot):
-    bot.add_cog(ctf(bot))
+    cog = ctf(bot)
+    cog.timecheck_task.start()
+    bot.add_cog(cog)
