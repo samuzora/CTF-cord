@@ -134,17 +134,22 @@ class ctf(commands.Cog):
             await join_msg.add_reaction("✋")
 
             # create scheduled event
-            start_time = event_info["start"]
-            if event_info["start"] < now:
-                start_time = now
+            try:
+                # will fail if dates aren't valid (eg. start == end, start > end)
+                # in which case just don't create the event
+                start_time = event_info["start"]
+                if event_info["start"] < now:
+                    start_time = now
 
-            assert ctx.interaction.guild is not None
-            await ctx.interaction.guild.create_scheduled_event(
-                name=event_info["title"],
-                start_time=start_time,
-                end_time=event_info["finish"],
-                location=join_msg.jump_url
-            )
+                assert ctx.interaction.guild is not None
+                await ctx.interaction.guild.create_scheduled_event(
+                    name=event_info["title"],
+                    start_time=start_time,
+                    end_time=event_info["finish"],
+                    location=join_msg.jump_url
+                )
+            except Exception as e:
+                print(e)
 
             ctf = Ctf(channel_id=channel.id, join_message_id=join_msg.id)
             conn.add(ctf)
@@ -164,7 +169,6 @@ class ctf(commands.Cog):
     @tasks.loop(seconds=1)
     async def timecheck_task(self):
         interval = timedelta(minutes=30)
-        print(self.timers)
 
         self.timers = [i for i in self.timers if not i["expired"]]
 
