@@ -105,11 +105,13 @@ class ctf(commands.Cog):
         self, ctx: discord.ApplicationContext,
         team_name: str, ctftime_link: str
    ):
+        await ctx.defer()
+
         # get ctf details
         event_info = await util.ctf.get_details(ctftime_link)
         if event_info is False:
             # ctf doesn't exist
-            await ctx.respond("Invalid CTFtime event link/id", ephemeral=True)
+            await ctx.followup.send("Invalid CTFtime event link/id")
             return
 
         now = datetime.now(timezone.utc) + timedelta(0, 10)
@@ -117,7 +119,7 @@ class ctf(commands.Cog):
         # Check if timing is valid
         if now > event_info["finish"]:
             # ctf has already ended
-            await ctx.respond("CTF is over", ephemeral=True)
+            await ctx.followup.send("CTF is over")
             return
 
         # create text channel for CTF
@@ -125,12 +127,12 @@ class ctf(commands.Cog):
             channel = await util.ctf.create_channel(ctx, event_info)
 
             if channel is None:
-                await ctx.respond("Error creating channel", ephemeral=True)
+                await ctx.followup.send("Error creating channel")
                 return
 
             embed = await util.ctf.details_to_embed(event_info)
-            join_interaction = await ctx.send_response(embed=embed.set_footer(text="React with ✋ to join the channel."))
-            join_msg = await join_interaction.original_response()
+            join_msg = await ctx.followup.send(embed=embed.set_footer(text="React with ✋ to join the channel."))
+            # join_msg = await join_interaction.original_response()
             await join_msg.add_reaction("✋")
 
             # create scheduled event
